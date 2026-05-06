@@ -207,3 +207,36 @@ class TestTrackComposer:
 
         assert isinstance(track, Track)
         assert track.total_length > 5000
+
+    def test_composer_auto_mode_not_implemented(self):
+        """Composer AUTO mode should raise NotImplementedError (Task 4)."""
+        from f1_track.generate.composer import TrackComposer
+        from f1_track.generate.params import GenParams, Mode
+        from f1_track.rules import create_ruleset_f1_grade1
+
+        ruleset = create_ruleset_f1_grade1()
+        params = GenParams(mode=Mode.AUTO, ruleset_name="f1_grade1", difficulty="medium")
+
+        composer = TrackComposer()
+        with pytest.raises(NotImplementedError, match="AUTO mode not yet implemented"):
+            composer.compose(params, ruleset)
+
+    def test_composer_manual_mode_not_implemented(self):
+        """Composer MANUAL mode should raise NotImplementedError (Task 5)."""
+        from f1_track.generate.composer import TrackComposer
+        from f1_track.generate.params import GenParams, Mode
+        from f1_track.rules import create_ruleset_f1_grade1
+
+        ruleset = create_ruleset_f1_grade1()
+        params = GenParams(
+            mode=Mode.MANUAL,
+            ruleset_name="f1_grade1",
+            target_length=5500.0,
+            sector_count=3,
+            segment_preferences={"straight": 0.5, "hairpin": 0.5},
+            elevation_style="hilly"
+        )
+
+        composer = TrackComposer()
+        with pytest.raises(NotImplementedError, match="MANUAL mode not yet implemented"):
+            composer.compose(params, ruleset)
