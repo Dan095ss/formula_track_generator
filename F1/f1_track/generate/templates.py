@@ -18,7 +18,7 @@ from f1_track.geometry import (
 def create_demo_track() -> Track:
     """Create a demo track with all 10 segment types.
 
-    Builds a complete F1 Grade 1 compliant track (~5140m) featuring:
+    Builds a complete F1 Grade 1 compliant track (~5536m) featuring:
     1. Straight (500m)
     2. HighSpeedTurn (R=300m, 60°)
     3. Straight (300m)
@@ -36,7 +36,7 @@ def create_demo_track() -> Track:
     15. CircularTurn (R=150m, 90°)
     16. Straight (500m)
 
-    Total length: ~5140m
+    Total length: ~5536m (actual: 5535.7m)
     Constraints (F1 Grade 1):
     - Length: 3.5-7 km ✓
     - Width: 12-15 m ✓
