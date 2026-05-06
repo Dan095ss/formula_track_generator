@@ -208,18 +208,27 @@ class TestTrackComposer:
         assert isinstance(track, Track)
         assert track.total_length > 5000
 
-    def test_composer_auto_mode_not_implemented(self):
-        """Composer AUTO mode should raise NotImplementedError (Task 4)."""
+    def test_composer_auto_mode(self):
+        """Composer AUTO mode should generate random track within constraints."""
         from f1_track.generate.composer import TrackComposer
         from f1_track.generate.params import GenParams, Mode
+        from f1_track.geometry.track import Track
+        from f1_track.geometry.validate import TrackValidator
         from f1_track.rules import create_ruleset_f1_grade1
 
         ruleset = create_ruleset_f1_grade1()
         params = GenParams(mode=Mode.AUTO, ruleset_name="f1_grade1", difficulty="medium")
 
         composer = TrackComposer()
-        with pytest.raises(NotImplementedError, match="AUTO mode not yet implemented"):
-            composer.compose(params, ruleset)
+        track = composer.compose(params, ruleset)
+
+        # Track should be a valid Track object
+        assert isinstance(track, Track)
+        # Track should have reasonable length (around 90% of minimum)
+        assert track.total_length > ruleset.track_length_min * 0.85
+        # Track should pass FIA constraints
+        validator = TrackValidator(ruleset)
+        validator.validate(track)  # Should not raise
 
     def test_composer_manual_mode_not_implemented(self):
         """Composer MANUAL mode should raise NotImplementedError (Task 5)."""
