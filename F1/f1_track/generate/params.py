@@ -35,7 +35,7 @@ class GenParams(BaseModel):
     @field_validator("target_length")
     @classmethod
     def validate_target_length(cls, v):
-        """target_length must be positive when provided."""
+        """Ensure target_length is positive (must be > 0 meters)."""
         if v is not None and v <= 0:
             raise ValueError("target_length must be positive")
         return v
@@ -43,7 +43,7 @@ class GenParams(BaseModel):
     @field_validator("sector_count")
     @classmethod
     def validate_sector_count(cls, v):
-        """sector_count must be positive when provided."""
+        """Ensure sector_count is in valid range 2-6 sectors."""
         if v is not None and v <= 0:
             raise ValueError("sector_count must be positive")
         return v
@@ -51,7 +51,7 @@ class GenParams(BaseModel):
     @field_validator("segment_preferences")
     @classmethod
     def validate_segment_preferences(cls, v):
-        """Validate that all segment preference values are in [0, 1]."""
+        """Ensure all preference values are in [0, 1] range (percentages)."""
         if v is not None:
             for key, val in v.items():
                 if not (0 <= val <= 1):

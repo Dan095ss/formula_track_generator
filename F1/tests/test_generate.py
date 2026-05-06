@@ -145,3 +145,15 @@ class TestGenParamsValidation:
                 segment_preferences={"hairpin": 1.5},
                 elevation_style="hilly"
             )
+
+    def test_segment_preferences_negative_values(self):
+        """segment_preferences values must not be negative."""
+        with pytest.raises(ValueError, match="must be in \\[0, 1\\]"):
+            GenParams(
+                mode=Mode.MANUAL,
+                ruleset_name="f1_grade1",
+                target_length=5000.0,
+                sector_count=3,
+                segment_preferences={"hairpin": -0.1},
+                elevation_style="hilly"
+            )
