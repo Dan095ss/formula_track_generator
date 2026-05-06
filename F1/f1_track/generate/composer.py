@@ -127,7 +127,8 @@ class TrackComposer:
             ),
         }
 
-        # Target length: between min and max, aiming for middle point for AUTO mode
+        # Target track length set at midpoint between min and max (150% of minimum)
+        # This balances difficulty: not too short for variety, not max for performance
         target_length = (
             ruleset.track_length_min
             + (ruleset.track_length_max - ruleset.track_length_min) * 0.5
@@ -179,6 +180,12 @@ class TrackComposer:
                 min_corner_radius = min(
                     min_corner_radius, segment.R_end, segment.R_start
                 )
+            elif isinstance(segment, TighteningRadius):
+                # TighteningRadius has clothoid with varying radius
+                # Use final radius as tightest point
+                min_corner_radius = min(min_corner_radius, segment.final_radius_m)
+            elif isinstance(segment, BlindCrest):
+                min_corner_radius = min(min_corner_radius, segment.R)
 
         # First corner radius is usually first non-straight segment
         first_corner_radius = ruleset.first_corner_radius_max
