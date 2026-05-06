@@ -18,6 +18,8 @@ from f1_track.geometry import (
 def create_demo_track() -> Track:
     """Create a demo track with all 10 segment types.
 
+    This is an educational track with 16 segment instances demonstrating all 10 available segment types.
+
     Builds a complete F1 Grade 1 compliant track (~5536m) featuring:
     1. Straight (500m)
     2. HighSpeedTurn (R=300m, 60°)
