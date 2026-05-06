@@ -230,10 +230,12 @@ class TestTrackComposer:
         validator = TrackValidator(ruleset)
         validator.validate(track)  # Should not raise
 
-    def test_composer_manual_mode_not_implemented(self):
-        """Composer MANUAL mode should raise NotImplementedError (Task 5)."""
+    def test_composer_manual_mode(self):
+        """Composer MANUAL mode should respect user segment preferences."""
         from f1_track.generate.composer import TrackComposer
         from f1_track.generate.params import GenParams, Mode
+        from f1_track.geometry.track import Track
+        from f1_track.geometry.validate import TrackValidator
         from f1_track.rules import create_ruleset_f1_grade1
 
         ruleset = create_ruleset_f1_grade1()
@@ -242,10 +244,20 @@ class TestTrackComposer:
             ruleset_name="f1_grade1",
             target_length=5500.0,
             sector_count=3,
-            segment_preferences={"straight": 0.5, "hairpin": 0.5},
-            elevation_style="hilly"
+            segment_preferences={"hairpin": 0.15, "chicane": 0.15, "high_speed": 0.35, "straight": 0.35},
+            elevation_style="hilly",
+            difficulty="medium"
         )
 
         composer = TrackComposer()
-        with pytest.raises(NotImplementedError, match="MANUAL mode not yet implemented"):
-            composer.compose(params, ruleset)
+        track = composer.compose(params, ruleset)
+
+        # Track should be a valid Track object
+        assert isinstance(track, Track)
+
+        # Validate track
+        validator = TrackValidator(ruleset)
+        validator.validate(track)  # Should not raise
+
+        # Track should be close to target length (within 5%)
+        assert abs(track.total_length - params.target_length) / params.target_length < 0.05

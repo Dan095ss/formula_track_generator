@@ -216,14 +216,176 @@ class TrackComposer:
     def _compose_manual(self, params: GenParams, ruleset: RuleSet) -> Track:
         """Compose MANUAL mode: full user control over parameters.
 
+        Builds a track using user-specified segment preferences and elevation style.
+        Generates segments according to weighted distribution until target length is reached.
+
         Args:
-            params: GenParams with target_length, sector_count, etc.
+            params: GenParams with target_length, sector_count, segment_preferences, elevation_style
             ruleset: Track rules to respect
 
         Returns:
-            User-composed Track
+            User-composed Track respecting target_length and preferences
 
-        Raises:
-            NotImplementedError: MANUAL mode not yet implemented
+        Segment length ranges by elevation_style:
+        - flat: 150-400m
+        - hilly: 200-500m
+        - mountainous: 300-600m
+
+        Elevation change ranges by elevation_style:
+        - flat: 0-20m
+        - hilly: 40-60m
+        - mountainous: 70-90m
         """
-        raise NotImplementedError("MANUAL mode not yet implemented")
+        # Map user-provided segment preference names to actual segment types
+        # segment_preferences keys: "hairpin", "chicane", "high_speed", "straight", etc.
+        segment_preference_map = {
+            "hairpin": "hairpin",
+            "chicane": "chicane",
+            "high_speed": "high_speed_turn",
+            "straight": "straight",
+            "esses": "esses",
+            "parabolica": "parabolica",
+            "tightening_radius": "tightening_radius",
+            "off_camber": "off_camber",
+            "blind_crest": "blind_crest",
+        }
+
+        # Convert user preferences to normalized segment weights
+        user_prefs = params.segment_preferences or {}
+        segment_weights = {}
+        total_weight = 0
+
+        for pref_name, pref_value in user_prefs.items():
+            if pref_name in segment_preference_map:
+                segment_type = segment_preference_map[pref_name]
+                segment_weights[segment_type] = pref_value
+                total_weight += pref_value
+
+        # Normalize weights to sum to 1.0
+        if total_weight > 0:
+            segment_weights = {k: v / total_weight for k, v in segment_weights.items()}
+
+        # Elevation style affects segment length ranges
+        elevation_ranges = {
+            "flat": (150, 400),
+            "hilly": (200, 500),
+            "mountainous": (300, 600),
+        }
+        elevation_change_ranges = {
+            "flat": (0, 20),
+            "hilly": (40, 60),
+            "mountainous": (70, 90),
+        }
+
+        seg_len_min, seg_len_max = elevation_ranges.get(params.elevation_style, (200, 500))
+        elev_min, elev_max = elevation_change_ranges.get(params.elevation_style, (40, 60))
+
+        # Segment generator functions with length range consideration
+        segment_generators = {
+            "straight": lambda: Straight(np.random.uniform(seg_len_min, seg_len_max)),
+            "high_speed_turn": lambda: HighSpeedTurn(
+                np.random.uniform(200, 350), 0.0001
+            ),
+            "circular_turn": lambda: CircularTurn(
+                np.random.uniform(100, 200), np.random.uniform(np.pi / 6, np.pi / 2)
+            ),
+            "parabolica": lambda: Parabolica(np.random.uniform(300, 450)),
+            "hairpin": lambda: Hairpin(np.random.uniform(50, 80), 0.001),
+            "chicane": lambda: Chicane(np.random.uniform(60, 100), num_turns=2),
+            "esses": lambda: Esses(np.random.uniform(80, 150)),
+            "tightening_radius": lambda: TighteningRadius(
+                np.random.uniform(150, 250), 0.001
+            ),
+            "off_camber": lambda: OffCamber(
+                np.random.uniform(seg_len_min, seg_len_max),
+                np.random.uniform(100, 150),
+                np.random.uniform(50, 100),
+            ),
+            "blind_crest": lambda: BlindCrest(
+                np.random.uniform(seg_len_min, seg_len_max), np.random.uniform(80, 150)
+            ),
+        }
+
+        # Target length at 95% of desired to leave margin for final adjustments
+        target_length = params.target_length * 0.95
+
+        # Build segments iteratively according to weighted preferences
+        segments = []
+        current_length = 0.0
+
+        while current_length < target_length:
+            # Randomly select segment type based on user preferences
+            if segment_weights:
+                segment_type = np.random.choice(
+                    list(segment_weights.keys()), p=list(segment_weights.values())
+                )
+            else:
+                # Fallback if no preferences specified (shouldn't happen in validation)
+                segment_type = "straight"
+
+            # Generate segment
+            segment = segment_generators[segment_type]()
+            segment_length = segment.length()
+
+            # Check if adding this segment would exceed max length
+            if current_length + segment_length <= ruleset.track_length_max:
+                segments.append(segment)
+                current_length += segment_length
+            else:
+                # If too long, try a shorter straight instead
+                short_straight = Straight(50)
+                if current_length + short_straight.length() <= ruleset.track_length_max:
+                    segments.append(short_straight)
+                    current_length += short_straight.length()
+                else:
+                    break
+
+        # Calculate aggregate properties from segments
+        min_corner_radius = ruleset.min_corner_radius
+        for segment in segments:
+            if isinstance(segment, CircularTurn):
+                min_corner_radius = min(min_corner_radius, segment.R)
+            elif isinstance(segment, HighSpeedTurn):
+                min_corner_radius = min(min_corner_radius, segment.R)
+            elif isinstance(segment, Hairpin):
+                min_corner_radius = min(min_corner_radius, segment.R)
+            elif isinstance(segment, Parabolica):
+                min_corner_radius = min(min_corner_radius, segment.R)
+            elif isinstance(segment, Chicane):
+                min_corner_radius = min(min_corner_radius, segment.R)
+            elif isinstance(segment, Esses):
+                min_corner_radius = min(min_corner_radius, segment.R)
+            elif isinstance(segment, OffCamber):
+                min_corner_radius = min(
+                    min_corner_radius, segment.R_end, segment.R_start
+                )
+            elif isinstance(segment, TighteningRadius):
+                min_corner_radius = min(min_corner_radius, segment.final_radius_m)
+            elif isinstance(segment, BlindCrest):
+                min_corner_radius = min(min_corner_radius, segment.R)
+
+        # First corner radius
+        first_corner_radius = ruleset.first_corner_radius_max
+        for segment in segments:
+            if isinstance(segment, (CircularTurn, HighSpeedTurn, Hairpin)):
+                if hasattr(segment, "R"):
+                    first_corner_radius = min(segment.R, ruleset.first_corner_radius_max)
+                break
+
+        # Average width: F1 standard
+        avg_width = (ruleset.track_width_min + ruleset.track_width_max) / 2
+
+        # Elevation: based on elevation_style
+        max_elevation_change = np.random.uniform(elev_min, elev_max)
+
+        # Banking: conservative estimate
+        max_banking_deg = ruleset.max_banking_degrees * 0.75
+
+        return Track(
+            total_length=current_length,
+            avg_width=avg_width,
+            first_corner_radius=first_corner_radius,
+            min_corner_radius=min_corner_radius,
+            max_elevation_change=max_elevation_change,
+            max_banking_deg=max_banking_deg,
+        )
