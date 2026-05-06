@@ -19,6 +19,12 @@ class Segment:
         _, _, heading = self.end_point(initial_heading)
         return heading
 
+    def _build_curves(self, initial_heading: float) -> list:
+        """Return ordered list of sub-curves (Curve instances).
+        Chaining them reproduces this segment's geometry exactly.
+        """
+        raise NotImplementedError
+
 
 class Straight(Segment):
     """Straight line segment."""
@@ -32,6 +38,9 @@ class Straight(Segment):
     def end_point(self, initial_heading: float) -> tuple[float, float, float]:
         line = Line(self.L, heading=initial_heading)
         return line.point(self.L)
+
+    def _build_curves(self, initial_heading: float) -> list:
+        return [Line(self.L, heading=initial_heading)]
 
 
 class CircularTurn(Segment):
@@ -48,6 +57,9 @@ class CircularTurn(Segment):
         arc = CircularArc(self.R, self.angle, initial_heading=initial_heading)
         x, y, heading = arc.point(self.length())
         return (x, y, heading)
+
+    def _build_curves(self, initial_heading: float) -> list:
+        return [CircularArc(self.R, self.angle, initial_heading=initial_heading)]
 
 
 class Hairpin(Segment):
@@ -99,6 +111,15 @@ class Hairpin(Segment):
 
         return (x_total, y_total, heading)
 
+    def _build_curves(self, initial_heading: float) -> list:
+        h0 = initial_heading
+        entry = ClothoidCurve(self.k, self.L_spiral, h0)
+        h1 = entry.point(entry.arc_length())[2]
+        arc = CircularArc(self.R, np.pi, initial_heading=h1)
+        h2 = arc.point(arc.arc_length())[2]
+        exit_spiral = ClothoidCurve(-self.k, self.L_spiral, h2)
+        return [entry, arc, exit_spiral]
+
 
 class Chicane(Segment):
     """Chicane: alternating left-right turns."""
@@ -135,6 +156,18 @@ class Chicane(Segment):
 
         return (x_total, y_total, heading)
 
+    def _build_curves(self, initial_heading: float) -> list:
+        curves = []
+        heading = initial_heading
+        for _ in range(self.turns):
+            left = CircularArc(self.R, np.pi / 2, initial_heading=heading)
+            heading = left.point(left.arc_length())[2]
+            curves.append(left)
+            right = CircularArc(self.R, -np.pi / 2, initial_heading=heading)
+            heading = right.point(right.arc_length())[2]
+            curves.append(right)
+        return curves
+
 
 class Esses(Segment):
     """S-curves: opposing curves (L-R-L or similar)."""
@@ -168,6 +201,15 @@ class Esses(Segment):
         y_total += y3
 
         return (x_total, y_total, heading)
+
+    def _build_curves(self, initial_heading: float) -> list:
+        h = initial_heading
+        left = CircularArc(self.R, np.pi / 2, initial_heading=h)
+        h = left.point(left.arc_length())[2]
+        right = CircularArc(self.R, -np.pi / 2, initial_heading=h)
+        h = right.point(right.arc_length())[2]
+        left2 = CircularArc(self.R, np.pi / 2, initial_heading=h)
+        return [left, right, left2]
 
 
 class HighSpeedTurn(Segment):
@@ -206,6 +248,15 @@ class HighSpeedTurn(Segment):
 
         return (x_total, y_total, heading)
 
+    def _build_curves(self, initial_heading: float) -> list:
+        h0 = initial_heading
+        entry = ClothoidCurve(self.k, self.L_spiral, h0)
+        h1 = entry.point(entry.arc_length())[2]
+        arc = CircularArc(self.R, np.pi / 2, initial_heading=h1)
+        h2 = arc.point(arc.arc_length())[2]
+        exit_spiral = ClothoidCurve(-self.k, self.L_spiral, h2)
+        return [entry, arc, exit_spiral]
+
 
 class Parabolica(Segment):
     """Parabolica: fast, flowing corner (opposite of hairpin)."""
@@ -219,7 +270,11 @@ class Parabolica(Segment):
         return self.arc.arc_length()
 
     def end_point(self, initial_heading: float) -> tuple[float, float, float]:
-        return self.arc.end_point(initial_heading)
+        arc = CircularArc(self.R, np.pi / 3, initial_heading=initial_heading)
+        return arc.point(arc.arc_length())
+
+    def _build_curves(self, initial_heading: float) -> list:
+        return [CircularArc(self.R, np.pi / 3, initial_heading=initial_heading)]
 
 
 class TighteningRadius(Segment):
@@ -235,6 +290,9 @@ class TighteningRadius(Segment):
     def end_point(self, initial_heading: float) -> tuple[float, float, float]:
         clothoid = ClothoidCurve(self.k, self.L, initial_heading)
         return clothoid.point(self.L)
+
+    def _build_curves(self, initial_heading: float) -> list:
+        return [ClothoidCurve(self.k, self.L, initial_heading)]
 
 
 class OffCamber(Segment):
@@ -255,6 +313,11 @@ class OffCamber(Segment):
         arc = CircularArc(R_avg, angle, initial_heading)
         return arc.point(self.L)
 
+    def _build_curves(self, initial_heading: float) -> list:
+        R_avg = (self.R_start + self.R_end) / 2
+        angle = self.L / R_avg
+        return [CircularArc(R_avg, angle, initial_heading=initial_heading)]
+
 
 class BlindCrest(Segment):
     """Blind crest: rise in elevation creating visual obstruction."""
@@ -270,3 +333,6 @@ class BlindCrest(Segment):
     def end_point(self, initial_heading: float) -> tuple[float, float, float]:
         # Crest is geometrically straight (elevation handled separately)
         return self.line.end_point(initial_heading)
+
+    def _build_curves(self, initial_heading: float) -> list:
+        return [Line(self.L, heading=initial_heading)]
