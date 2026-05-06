@@ -187,3 +187,23 @@ class TestDemoTrack:
         validator = TrackValidator(ruleset)
         # Should not raise ValidationError
         validator.validate(track)
+
+
+class TestTrackComposer:
+    """Test TrackComposer for composing tracks from parameters."""
+
+    def test_composer_demo_mode(self):
+        """TrackComposer should return demo track for DEMO mode."""
+        from f1_track.generate.composer import TrackComposer
+        from f1_track.generate.params import GenParams, Mode
+        from f1_track.geometry.track import Track
+        from f1_track.rules import create_ruleset_f1_grade1
+
+        ruleset = create_ruleset_f1_grade1()
+        params = GenParams(mode=Mode.DEMO, ruleset_name="f1_grade1")
+
+        composer = TrackComposer()
+        track = composer.compose(params, ruleset)
+
+        assert isinstance(track, Track)
+        assert track.total_length > 5000
