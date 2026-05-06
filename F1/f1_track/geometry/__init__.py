@@ -13,6 +13,7 @@ from .segment import (
     OffCamber,
     BlindCrest,
 )
+from .track import Track
 
 __all__ = [
     "Curve",
@@ -30,4 +31,5 @@ __all__ = [
     "TighteningRadius",
     "OffCamber",
     "BlindCrest",
+    "Track",
 ]

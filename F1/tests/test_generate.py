@@ -157,3 +157,33 @@ class TestGenParamsValidation:
                 segment_preferences={"hairpin": -0.1},
                 elevation_style="hilly"
             )
+
+
+class TestDemoTrack:
+    """Test DemoTrack template creation and validation."""
+
+    def test_demo_track_creation(self):
+        """create_demo_track() should return valid Track with all 10 segment types."""
+        from f1_track.generate.templates import create_demo_track
+        from f1_track.geometry.track import Track
+
+        track = create_demo_track()
+        assert isinstance(track, Track)
+        assert track.total_length > 0
+        assert track.avg_width > 0
+        assert track.first_corner_radius > 0
+        assert track.min_corner_radius > 0
+        assert track.max_elevation_change >= 0
+        assert track.max_banking_deg >= 0
+
+    def test_demo_track_passes_validation(self):
+        """create_demo_track() should pass F1 Grade 1 validation."""
+        from f1_track.generate.templates import create_demo_track
+        from f1_track.rules import create_ruleset_f1_grade1
+        from f1_track.geometry.validate import TrackValidator
+
+        track = create_demo_track()
+        ruleset = create_ruleset_f1_grade1()
+        validator = TrackValidator(ruleset)
+        # Should not raise ValidationError
+        validator.validate(track)
