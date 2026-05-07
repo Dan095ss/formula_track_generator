@@ -86,7 +86,7 @@ bd close <id>         # Complete work
 - LapSimulator: Quasi-steady-state simulation with grip/power speed limits
 - **Files:** `f1_track/sim/car.py`, `f1_track/sim/qss.py`, `f1_track/sim/raceline.py`
 
-### Stage 4 — Parametric Track Generator ✅ COMPLETE (THIS SESSION)
+### Stage 4 — Parametric Track Generator ✅ COMPLETE
 - **GenParams:** Pydantic model with 3 generation modes (DEMO, AUTO, MANUAL)
 - **DemoTrack:** Reference track with all 10 segment types (~5540m, F1 Grade 1 compliant)
 - **TrackComposer:** Main engine with 3 strategies:
@@ -94,8 +94,17 @@ bd close <id>         # Complete work
   - AUTO: Weighted-random generation by difficulty (easy/medium/hard)
   - MANUAL: User preferences (segment distribution, elevation style, target length)
 - **Files:** `f1_track/generate/params.py`, `f1_track/generate/templates.py`, `f1_track/generate/composer.py`
-- **Tests:** 27/27 passing in `tests/test_generate.py`
-- **Documentation:** See `STAGE4_DOCUMENTATION.md`
+
+### Stage 5 — Visualization ✅ COMPLETE
+- **Geometry layer:** `Segment._build_curves()` + `Segment.sample()` with adaptive ds (1m arcs, 10m lines, 2m clothoids)
+- **`build_centerline(segments)`:** chains samples into global XY frame with exact curvature
+- **`generate_elevation()`:** deterministic cubic-spline elevation biased by segment type (BlindCrest=peak, Hairpin=valley)
+- **`TrackSession`:** bundles Track, segments, TrackGeometry, speed profile, seed, params
+- **`TrackComposer.compose_full()`:** full pipeline returning TrackSession; seeded for reproducibility
+- **Plotly builders:** 6 pure functions (2D map, 3D view, speed/curvature/elevation profiles, segment breakdown)
+- **Streamlit app:** DEMO/AUTO/MANUAL sidebar + tabbed viz + FIA badge; run with `streamlit run f1_track/viz/app.py`
+- **Files:** `f1_track/viz/{geometry,elevation,session,plots,app}.py`; `f1_track/geometry/segment.py` (refactored)
+- **Tests:** 77/77 passing
 
 ---
 
@@ -106,11 +115,18 @@ bd close <id>         # Complete work
 cd C:/Users/Sevryuk.DA/Documents/CLAUDE
 python -m pytest tests/ -v
 
-# Run specific test file
-python -m pytest tests/test_generate.py -v
+# End-to-end smoke test
+python -c "
+from f1_track.generate import GenParams, Mode, TrackComposer
+from f1_track.rules import create_ruleset_f1_grade1
+params = GenParams(mode=Mode.DEMO, ruleset_name='f1_grade1')
+s = TrackComposer().compose_full(params, create_ruleset_f1_grade1(), seed=1)
+print(f'length={s.track.total_length:.1f}m lap={s.speed_profile[\"lap_time_s\"]:.2f}s pts={len(s.geometry.x)}')"
 
-# Check imports
-python -c "from f1_track.generate import GenParams, Mode, TrackComposer, create_demo_track; print('✓ Stage 4 imports OK')"
+# Launch Streamlit app
+streamlit run f1_track/viz/app.py
+# Or via console script (after pip install -e .):
+f1track-app
 
 # Git status and push
 git status
@@ -124,31 +140,38 @@ f1_track/
 ├── rules.py                    # Stage 0.5: RuleSet standards
 ├── geometry/
 │   ├── curve.py               # Stage 1: Parametric curves
-│   ├── segment.py             # Stage 1: Segment types (10 types)
+│   ├── segment.py             # Stage 1+5: Segment types + _build_curves + sample()
 │   ├── track.py               # Stage 2: Track model
 │   └── validate.py            # Stage 2: FIA validation
 ├── sim/
 │   ├── car.py                 # Stage 3: F1Car model
 │   ├── qss.py                 # Stage 3: QSS lap simulator
 │   └── raceline.py            # Stage 3: Raceline optimizer
-└── generate/
-    ├── params.py              # Stage 4: GenParams model
-    ├── templates.py           # Stage 4: DemoTrack factory
-    └── composer.py            # Stage 4: TrackComposer engine
+├── generate/
+│   ├── params.py              # Stage 4: GenParams model
+│   ├── templates.py           # Stage 4+5: DemoTrack factory + create_demo_segments
+│   └── composer.py            # Stage 4+5: TrackComposer + compose_full
+└── viz/
+    ├── geometry.py            # Stage 5: TrackGeometry + build_centerline
+    ├── elevation.py           # Stage 5: deterministic pseudo-elevation
+    ├── session.py             # Stage 5: TrackSession dataclass
+    ├── plots.py               # Stage 5: Plotly figure builders (6 functions)
+    └── app.py                 # Stage 5: Streamlit application
 ```
 
-**Data Flow:**
+**Data Flow (Stage 5):**
 ```
-GenParams (user input)
+GenParams (user input via Streamlit sidebar)
     ↓
-TrackComposer.compose(params, ruleset)
-    ├→ DEMO: create_demo_track()
-    ├→ AUTO: _compose_auto() [weighted-random]
-    └→ MANUAL: _compose_manual() [preferences]
+TrackComposer.compose_full(params, ruleset, seed)
+    ↓  _build_segments → _track_from_segments
+    ↓  build_centerline(segments)      → TrackGeometry (x,y,s,heading,curvature)
+    ↓  generate_elevation(segments, geometry, seed) → elevation array
+    ↓  LapSimulator.simulate(s, curvature)  → speed_profile
     ↓
-TrackValidator (FIA checks)
+TrackSession (track, segments, geometry, speed_profile, seed, params)
     ↓
-Track object (valid or raises error)
+Streamlit app: 2D map | 3D view | Analysis tabs
 ```
 
 ## Conventions & Patterns
@@ -177,14 +200,12 @@ Track object (valid or raises error)
 
 ### Next Stages (TODO)
 
-**Stage 5 — Visualization**
-- 2D track plot with centerline, width, elevation profile
-- 3D interactive visualization (Plotly)
-- Speed profile overlay
-- CLI report generation
+**Stage 6 — Assetto Corsa Export**
+- Export `.kn5` / `.ai` track files for Assetto Corsa
+- Use TrackSession geometry (x, y, elevation, heading) as source
+- Placeholder button already in Streamlit app (raises NotImplementedError)
 
 **Post-MVP**
-- Assetto Corsa `.kml` export format
-- Desktop GUI (Tkinter or PyQt)
+- Desktop GUI (Tkinter or PyQt) — Streamlit is the current UI
 - Performance optimization for large track libraries
 - Support for additional racing series (F2, IndyCar, WEC)
