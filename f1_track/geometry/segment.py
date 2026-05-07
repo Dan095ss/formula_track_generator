@@ -31,6 +31,54 @@ class Segment:
         """
         raise NotImplementedError
 
+    def sample(self, initial_heading: float, ds_default: float = 2.0) -> dict:
+        """Sample dense points along all sub-curves.
+
+        Coordinates are in the segment-start frame, rotated to
+        match initial_heading. build_centerline() only needs to
+        translate when chaining segments.
+
+        Returns dict with keys: x, y, heading, curvature, s_local.
+        """
+        def _ds_for(curve):
+            if isinstance(curve, Line):
+                return 10.0
+            if isinstance(curve, CircularArc):
+                return 1.0
+            if isinstance(curve, ClothoidCurve):
+                return 2.0
+            return ds_default
+
+        xs, ys, headings, curvatures, s_vals = [], [], [], [], []
+        x_offset, y_offset, s_offset = 0.0, 0.0, 0.0
+
+        for i, curve in enumerate(self._build_curves(initial_heading)):
+            L = curve.arc_length()
+            ds = _ds_for(curve)
+            n = max(2, int(np.ceil(L / ds)) + 1)
+            s_local = np.linspace(0.0, L, n)
+            start_idx = 0 if i == 0 else 1
+            for j in range(start_idx, n):
+                cx, cy, ch = curve.point(s_local[j])
+                xs.append(cx + x_offset)
+                ys.append(cy + y_offset)
+                headings.append(ch)
+                curvatures.append(curve.curvature_at(s_local[j]))
+                s_vals.append(s_local[j] + s_offset)
+
+            ex, ey, _ = curve.point(L)
+            x_offset += ex
+            y_offset += ey
+            s_offset += L
+
+        return {
+            "x": np.array(xs),
+            "y": np.array(ys),
+            "heading": np.array(headings),
+            "curvature": np.array(curvatures),
+            "s_local": np.array(s_vals),
+        }
+
 
 class Straight(Segment):
     """Straight line segment."""

@@ -118,3 +118,87 @@ class TestEsses(TestBuildCurvesContract):
     def test_three_arcs(self):
         seg = Esses(100.0)
         assert len(seg._build_curves(0.0)) == 3
+
+
+class TestSampleStraight:
+    def test_sample_starts_at_origin(self):
+        seg = Straight(100.0)
+        s = seg.sample(initial_heading=0.0)
+        assert s["x"][0] == pytest.approx(0.0)
+        assert s["y"][0] == pytest.approx(0.0)
+        assert s["s_local"][0] == pytest.approx(0.0)
+
+    def test_sample_ends_at_endpoint(self):
+        seg = Straight(100.0)
+        ex, ey, eh = seg.end_point(0.5)
+        s = seg.sample(initial_heading=0.5)
+        assert s["x"][-1] == pytest.approx(ex, abs=1e-6)
+        assert s["y"][-1] == pytest.approx(ey, abs=1e-6)
+        assert s["heading"][-1] == pytest.approx(eh, abs=1e-6)
+        assert s["s_local"][-1] == pytest.approx(100.0, abs=1e-6)
+
+    def test_sample_curvature_zero_for_straight(self):
+        seg = Straight(100.0)
+        s = seg.sample(initial_heading=0.0)
+        assert np.allclose(s["curvature"], 0.0)
+
+    def test_sample_uses_large_ds_for_line(self):
+        seg = Straight(100.0)
+        s = seg.sample(initial_heading=0.0)
+        # ds=10m → ~11 points for 100m line
+        assert len(s["x"]) <= 12
+        assert len(s["x"]) >= 5
+
+
+class TestSampleCircularTurn:
+    def test_sample_curvature_constant(self):
+        R = 150.0
+        seg = CircularTurn(R, np.pi / 2)
+        s = seg.sample(initial_heading=0.0)
+        assert np.allclose(np.abs(s["curvature"]), 1.0 / R, atol=1e-9)
+
+    def test_sample_endpoint_matches(self):
+        seg = CircularTurn(150.0, np.pi / 2)
+        ex, ey, eh = seg.end_point(0.0)
+        s = seg.sample(initial_heading=0.0)
+        assert s["x"][-1] == pytest.approx(ex, abs=1e-4)
+        assert s["y"][-1] == pytest.approx(ey, abs=1e-4)
+        assert s["heading"][-1] == pytest.approx(eh, abs=1e-4)
+
+    def test_sample_dense_for_arc(self):
+        seg = CircularTurn(150.0, np.pi / 2)
+        s = seg.sample(initial_heading=0.0)
+        # ds=1m → many points
+        assert len(s["x"]) >= 100
+
+
+class TestSampleHairpin:
+    def test_curvature_starts_at_zero(self):
+        seg = Hairpin(60.0, 0.001)
+        s = seg.sample(initial_heading=0.0)
+        assert s["curvature"][0] == pytest.approx(0.0, abs=1e-9)
+
+    def test_curvature_max_in_middle(self):
+        seg = Hairpin(60.0, 0.001)
+        s = seg.sample(initial_heading=0.0)
+        assert np.max(np.abs(s["curvature"])) == pytest.approx(1.0 / 60.0, rel=0.01)
+
+    def test_endpoint_matches(self):
+        seg = Hairpin(60.0, 0.001)
+        ex, ey, eh = seg.end_point(0.4)
+        s = seg.sample(initial_heading=0.4)
+        assert s["x"][-1] == pytest.approx(ex, abs=1e-3)
+        assert s["y"][-1] == pytest.approx(ey, abs=1e-3)
+
+
+class TestSampleChicane:
+    def test_curvature_magnitude_correct(self):
+        seg = Chicane(80.0, num_turns=2)
+        s = seg.sample(initial_heading=0.0)
+        assert np.allclose(np.abs(s["curvature"]), 1.0 / 80.0, atol=1e-9)
+
+    def test_no_duplicate_points_at_curve_boundaries(self):
+        seg = Chicane(80.0, num_turns=2)
+        s = seg.sample(initial_heading=0.0)
+        deltas = np.diff(s["s_local"])
+        assert np.all(deltas > 0)
