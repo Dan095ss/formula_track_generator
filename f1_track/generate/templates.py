@@ -15,6 +15,31 @@ from f1_track.geometry import (
 )
 
 
+def create_demo_segments() -> list:
+    """Return ordered segment list for the demo track.
+
+    16 segments demonstrating all 10 available segment types.
+    """
+    return [
+        Straight(500),              # 1: Straight
+        HighSpeedTurn(300, np.pi / 3),  # 2: HighSpeedTurn (60°)
+        Straight(300),              # 3: Straight
+        Chicane(80, num_turns=2),   # 4: Chicane
+        Esses(120),                 # 5: Esses
+        Straight(400),              # 6: Straight
+        Hairpin(60),                # 7: Hairpin
+        Straight(300),              # 8: Straight
+        Parabolica(400),            # 9: Parabolica
+        TighteningRadius(200),      # 10: TighteningRadius
+        Straight(250),              # 11: Straight
+        OffCamber(220, 150, 80),    # 12: OffCamber (150→80m)
+        Straight(300),              # 13: Straight
+        BlindCrest(150, 100),       # 14: BlindCrest
+        CircularTurn(150, np.pi / 2),  # 15: CircularTurn (90°)
+        Straight(500),              # 16: Straight
+    ]
+
+
 def create_demo_track() -> Track:
     """Create a demo track with all 10 segment types.
 
@@ -47,25 +72,7 @@ def create_demo_track() -> Track:
     - Max elevation change < 100m ✓
     - Max banking < 15° ✓
     """
-    # Build segments composing the track
-    segments = [
-        Straight(500),              # 1: Straight
-        HighSpeedTurn(300, np.pi / 3),  # 2: HighSpeedTurn (60°)
-        Straight(300),              # 3: Straight
-        Chicane(80, num_turns=2),   # 4: Chicane
-        Esses(120),                 # 5: Esses
-        Straight(400),              # 6: Straight
-        Hairpin(60),                # 7: Hairpin
-        Straight(300),              # 8: Straight
-        Parabolica(400),            # 9: Parabolica
-        TighteningRadius(200),      # 10: TighteningRadius
-        Straight(250),              # 11: Straight
-        OffCamber(220, 150, 80),    # 12: OffCamber (150→80m)
-        Straight(300),              # 13: Straight
-        BlindCrest(150, 100),       # 14: BlindCrest
-        CircularTurn(150, np.pi / 2),  # 15: CircularTurn (90°)
-        Straight(500),              # 16: Straight
-    ]
+    segments = create_demo_segments()
 
     # Calculate total length
     total_length = sum(seg.length() for seg in segments)

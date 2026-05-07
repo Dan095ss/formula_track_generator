@@ -1,7 +1,7 @@
 """Track composer: combines parameters and rulesets into ready-made tracks."""
 import numpy as np
 from f1_track.generate.params import GenParams, Mode
-from f1_track.generate.templates import create_demo_track
+from f1_track.generate.templates import create_demo_track, create_demo_segments
 from f1_track.geometry.track import Track
 from f1_track.geometry import (
     Straight,
@@ -50,27 +50,127 @@ class TrackComposer:
         else:
             raise ValueError(f"Unknown mode: {params.mode}")
 
+    def _build_segments(self, params: GenParams, ruleset: RuleSet) -> list:
+        """Build the ordered segment list for the given params and ruleset.
+
+        Args:
+            params: Generation parameters specifying mode and config
+            ruleset: Track rules and constraints
+
+        Returns:
+            Ordered list of Segment instances
+        """
+        if params.mode == Mode.DEMO:
+            return create_demo_segments()
+        elif params.mode == Mode.AUTO:
+            return self._build_auto_segments(params, ruleset)
+        elif params.mode == Mode.MANUAL:
+            return self._build_manual_segments(params, ruleset)
+        else:
+            raise ValueError(f"Unknown mode: {params.mode}")
+
+    def _track_from_segments(
+        self, segments: list, ruleset: RuleSet, params: GenParams
+    ) -> Track:
+        """Compute Track aggregate properties from a segment list.
+
+        For DEMO mode the aggregate values are fixed constants (not derived
+        from segments) to preserve backwards-compatibility.
+
+        Args:
+            segments: Ordered list of Segment instances
+            ruleset: Track rules and constraints
+            params: Generation parameters (used to determine mode)
+
+        Returns:
+            Track instance with aggregate properties
+        """
+        if params.mode == Mode.DEMO:
+            return create_demo_track()
+
+        current_length = sum(seg.length() for seg in segments)
+
+        # Calculate aggregate properties from segments
+        min_corner_radius = ruleset.min_corner_radius
+        for segment in segments:
+            if isinstance(segment, CircularTurn):
+                min_corner_radius = min(min_corner_radius, segment.R)
+            elif isinstance(segment, HighSpeedTurn):
+                min_corner_radius = min(min_corner_radius, segment.R)
+            elif isinstance(segment, Hairpin):
+                min_corner_radius = min(min_corner_radius, segment.R)
+            elif isinstance(segment, Parabolica):
+                min_corner_radius = min(min_corner_radius, segment.R)
+            elif isinstance(segment, Chicane):
+                min_corner_radius = min(min_corner_radius, segment.R)
+            elif isinstance(segment, Esses):
+                min_corner_radius = min(min_corner_radius, segment.R)
+            elif isinstance(segment, OffCamber):
+                min_corner_radius = min(
+                    min_corner_radius, segment.R_end, segment.R_start
+                )
+            elif isinstance(segment, TighteningRadius):
+                # Final radius at tightest point: 1 / (k * L)
+                final_radius_m = 1.0 / (segment.k * segment.L)
+                min_corner_radius = min(min_corner_radius, final_radius_m)
+            elif isinstance(segment, BlindCrest):
+                min_corner_radius = min(min_corner_radius, segment.R)
+
+        # First corner radius is usually first non-straight segment
+        first_corner_radius = ruleset.first_corner_radius_max
+        for segment in segments:
+            if isinstance(segment, (CircularTurn, HighSpeedTurn, Hairpin)):
+                if hasattr(segment, "R"):
+                    first_corner_radius = min(segment.R, ruleset.first_corner_radius_max)
+                break
+
+        # Average width: F1 standard
+        avg_width = (ruleset.track_width_min + ruleset.track_width_max) / 2
+
+        if params.mode == Mode.AUTO:
+            # Elevation: conservative estimate
+            max_elevation_change = ruleset.max_elevation_change * 0.5
+            # Banking: conservative estimate
+            max_banking_deg = ruleset.max_banking_degrees * 0.75
+        else:
+            # MANUAL: elevation based on elevation_style
+            elevation_change_ranges = {
+                "flat": (0, 20),
+                "hilly": (40, 60),
+                "mountainous": (70, 90),
+            }
+            elev_min, elev_max = elevation_change_ranges.get(
+                params.elevation_style, (40, 60)
+            )
+            max_elevation_change = np.random.uniform(elev_min, elev_max)
+            # Banking: conservative estimate
+            max_banking_deg = ruleset.max_banking_degrees * 0.75
+
+        return Track(
+            total_length=current_length,
+            avg_width=avg_width,
+            first_corner_radius=first_corner_radius,
+            min_corner_radius=min_corner_radius,
+            max_elevation_change=max_elevation_change,
+            max_banking_deg=max_banking_deg,
+        )
+
     def _compose_demo(self) -> Track:
         """Compose DEMO mode: return predefined demo track."""
         return create_demo_track()
 
     def _compose_auto(self, params: GenParams, ruleset: RuleSet) -> Track:
-        """Compose AUTO mode: automatic generation with difficulty level.
+        """Compose AUTO mode: automatic generation with difficulty level."""
+        segments = self._build_auto_segments(params, ruleset)
+        return self._track_from_segments(segments, ruleset, params)
 
-        Generates a track using weighted-random segment selection based on difficulty.
-        Difficulty levels (easy/medium/hard) determine segment type probabilities.
-        Target track length is set between min and max constraints.
+    def _compose_manual(self, params: GenParams, ruleset: RuleSet) -> Track:
+        """Compose MANUAL mode: full user control over parameters."""
+        segments = self._build_manual_segments(params, ruleset)
+        return self._track_from_segments(segments, ruleset, params)
 
-        Args:
-            params: GenParams with difficulty level (easy, medium, or hard)
-            ruleset: Track rules and constraints to respect
-
-        Returns:
-            Auto-generated Track with valid properties meeting FIA constraints
-
-        Raises:
-            ValueError: If difficulty level is invalid
-        """
+    def _build_auto_segments(self, params: GenParams, ruleset: RuleSet) -> list:
+        """Build segment list for AUTO mode."""
         # Difficulty-based segment weights
         difficulty_weights = {
             "easy": {
@@ -128,7 +228,6 @@ class TrackComposer:
         }
 
         # Target track length set at midpoint between min and max (150% of minimum)
-        # This balances difficulty: not too short for variety, not max for performance
         target_length = (
             ruleset.track_length_min
             + (ruleset.track_length_max - ruleset.track_length_min) * 0.5
@@ -161,83 +260,11 @@ class TrackComposer:
                 else:
                     break
 
-        # Calculate aggregate properties from segments
-        min_corner_radius = ruleset.min_corner_radius
-        for segment in segments:
-            if isinstance(segment, CircularTurn):
-                min_corner_radius = min(min_corner_radius, segment.R)
-            elif isinstance(segment, HighSpeedTurn):
-                min_corner_radius = min(min_corner_radius, segment.R)
-            elif isinstance(segment, Hairpin):
-                min_corner_radius = min(min_corner_radius, segment.R)
-            elif isinstance(segment, Parabolica):
-                min_corner_radius = min(min_corner_radius, segment.R)
-            elif isinstance(segment, Chicane):
-                min_corner_radius = min(min_corner_radius, segment.R)
-            elif isinstance(segment, Esses):
-                min_corner_radius = min(min_corner_radius, segment.R)
-            elif isinstance(segment, OffCamber):
-                min_corner_radius = min(
-                    min_corner_radius, segment.R_end, segment.R_start
-                )
-            elif isinstance(segment, TighteningRadius):
-                # TighteningRadius has clothoid with varying radius
-                # Use final radius as tightest point
-                min_corner_radius = min(min_corner_radius, segment.final_radius_m)
-            elif isinstance(segment, BlindCrest):
-                min_corner_radius = min(min_corner_radius, segment.R)
+        return segments
 
-        # First corner radius is usually first non-straight segment
-        first_corner_radius = ruleset.first_corner_radius_max
-        for segment in segments:
-            if isinstance(segment, (CircularTurn, HighSpeedTurn, Hairpin)):
-                if hasattr(segment, "R"):
-                    first_corner_radius = min(segment.R, ruleset.first_corner_radius_max)
-                break
-
-        # Average width: F1 standard
-        avg_width = (ruleset.track_width_min + ruleset.track_width_max) / 2
-
-        # Elevation: conservative estimate
-        max_elevation_change = ruleset.max_elevation_change * 0.5
-
-        # Banking: conservative estimate
-        max_banking_deg = ruleset.max_banking_degrees * 0.75
-
-        return Track(
-            total_length=current_length,
-            avg_width=avg_width,
-            first_corner_radius=first_corner_radius,
-            min_corner_radius=min_corner_radius,
-            max_elevation_change=max_elevation_change,
-            max_banking_deg=max_banking_deg,
-        )
-
-    def _compose_manual(self, params: GenParams, ruleset: RuleSet) -> Track:
-        """Compose MANUAL mode: full user control over parameters.
-
-        Builds a track using user-specified segment preferences and elevation style.
-        Generates segments according to weighted distribution until target length is reached.
-
-        Args:
-            params: GenParams with target_length, sector_count, segment_preferences, elevation_style
-            ruleset: Track rules to respect
-
-        Returns:
-            User-composed Track respecting target_length and preferences
-
-        Segment length ranges by elevation_style:
-        - flat: 150-400m
-        - hilly: 200-500m
-        - mountainous: 300-600m
-
-        Elevation change ranges by elevation_style:
-        - flat: 0-20m
-        - hilly: 40-60m
-        - mountainous: 70-90m
-        """
+    def _build_manual_segments(self, params: GenParams, ruleset: RuleSet) -> list:
+        """Build segment list for MANUAL mode."""
         # Map user-provided segment preference names to actual segment types
-        # segment_preferences keys: "hairpin", "chicane", "high_speed", "straight", etc.
         segment_preference_map = {
             "hairpin": "hairpin",
             "chicane": "chicane",
@@ -271,14 +298,8 @@ class TrackComposer:
             "hilly": (200, 500),
             "mountainous": (300, 600),
         }
-        elevation_change_ranges = {
-            "flat": (0, 20),
-            "hilly": (40, 60),
-            "mountainous": (70, 90),
-        }
 
         seg_len_min, seg_len_max = elevation_ranges.get(params.elevation_style, (200, 500))
-        elev_min, elev_max = elevation_change_ranges.get(params.elevation_style, (40, 60))
 
         # Segment generator functions with length range consideration
         segment_generators = {
@@ -340,52 +361,4 @@ class TrackComposer:
                 else:
                     break
 
-        # Calculate aggregate properties from segments
-        min_corner_radius = ruleset.min_corner_radius
-        for segment in segments:
-            if isinstance(segment, CircularTurn):
-                min_corner_radius = min(min_corner_radius, segment.R)
-            elif isinstance(segment, HighSpeedTurn):
-                min_corner_radius = min(min_corner_radius, segment.R)
-            elif isinstance(segment, Hairpin):
-                min_corner_radius = min(min_corner_radius, segment.R)
-            elif isinstance(segment, Parabolica):
-                min_corner_radius = min(min_corner_radius, segment.R)
-            elif isinstance(segment, Chicane):
-                min_corner_radius = min(min_corner_radius, segment.R)
-            elif isinstance(segment, Esses):
-                min_corner_radius = min(min_corner_radius, segment.R)
-            elif isinstance(segment, OffCamber):
-                min_corner_radius = min(
-                    min_corner_radius, segment.R_end, segment.R_start
-                )
-            elif isinstance(segment, TighteningRadius):
-                min_corner_radius = min(min_corner_radius, segment.final_radius_m)
-            elif isinstance(segment, BlindCrest):
-                min_corner_radius = min(min_corner_radius, segment.R)
-
-        # First corner radius
-        first_corner_radius = ruleset.first_corner_radius_max
-        for segment in segments:
-            if isinstance(segment, (CircularTurn, HighSpeedTurn, Hairpin)):
-                if hasattr(segment, "R"):
-                    first_corner_radius = min(segment.R, ruleset.first_corner_radius_max)
-                break
-
-        # Average width: F1 standard
-        avg_width = (ruleset.track_width_min + ruleset.track_width_max) / 2
-
-        # Elevation: based on elevation_style
-        max_elevation_change = np.random.uniform(elev_min, elev_max)
-
-        # Banking: conservative estimate
-        max_banking_deg = ruleset.max_banking_degrees * 0.75
-
-        return Track(
-            total_length=current_length,
-            avg_width=avg_width,
-            first_corner_radius=first_corner_radius,
-            min_corner_radius=min_corner_radius,
-            max_elevation_change=max_elevation_change,
-            max_banking_deg=max_banking_deg,
-        )
+        return segments
