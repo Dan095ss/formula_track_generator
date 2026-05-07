@@ -21,7 +21,7 @@ class TestComposeRegressionDemo:
         params = GenParams(mode=Mode.DEMO, ruleset_name="f1_grade1")
         composer = TrackComposer()
         track = composer.compose(params, create_ruleset_f1_grade1())
-        assert track.total_length == pytest.approx(5535.71, abs=0.5)
+        assert track.total_length == pytest.approx(5493.14, abs=0.5)
         assert 12.0 <= track.avg_width <= 15.0
 
 

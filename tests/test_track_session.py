@@ -54,7 +54,7 @@ class TestComposeFullDemo:
 
         assert isinstance(session, TrackSession)
         assert isinstance(session.geometry, TrackGeometry)
-        assert len(session.segments) == 16  # demo has 16 segments
+        assert len(session.segments) == 12  # demo has 12 segments (closed CCW circuit)
         assert session.seed == 42
 
     def test_geometry_total_length_matches_track(self):

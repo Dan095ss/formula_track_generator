@@ -47,19 +47,27 @@ class ClothoidCurve(Curve):
 
     def point(self, s: float) -> tuple[float, float, float]:
         """Compute (x, y, heading) at arc length s using Fresnel integrals."""
-        # Fresnel integral parameter: t = s * sqrt(k / π)
-        if self.k <= 0 or s <= 0:
+        if s <= 0:
             return (0.0, 0.0, self.theta0)
 
-        t = s * np.sqrt(self.k / np.pi)
+        abs_k = abs(self.k)
+        if abs_k < 1e-12:
+            x = s * np.cos(self.theta0)
+            y = s * np.sin(self.theta0)
+            return (x, y, self.theta0)
+
+        # Fresnel integrals in theta0=0 frame
+        t = s * np.sqrt(abs_k / np.pi)
         C, S = fresnel(t)
+        scale = np.sqrt(np.pi / abs_k)
+        x0 = C * scale
+        y0 = S * scale if self.k > 0 else -S * scale  # k<0 mirrors y (CW spiral)
 
-        # Clothoid coordinates (scaled Fresnel integrals)
-        scale = np.sqrt(np.pi / self.k)
-        x = C * scale
-        y = S * scale
+        # Rotate by initial heading
+        x = x0 * np.cos(self.theta0) - y0 * np.sin(self.theta0)
+        y = x0 * np.sin(self.theta0) + y0 * np.cos(self.theta0)
 
-        # Heading: θ(s) = θ0 + k*s²/2
+        # Heading: θ(s) = θ0 + k*s²/2 (works for both signs of k)
         heading = self.theta0 + 0.5 * self.k * s ** 2
 
         return (x, y, heading)
@@ -92,28 +100,19 @@ class CircularArc(Curve):
         if self.R <= 0 or s <= 0:
             return (0.0, 0.0, self.theta0)
 
-        # Angle traversed
-        phi = (s / self.R) * np.sign(self.angle)
-
-        # Center of circular arc (perpendicular to initial heading)
-        # For counterclockwise (positive angle): center is to the left
         sign = np.sign(self.angle)
+        phi = s / self.R  # unsigned radians traversed
+
+        # Center is to the left for CCW (sign=+1), right for CW (sign=-1)
         cx = -sign * self.R * np.sin(self.theta0)
         cy = sign * self.R * np.cos(self.theta0)
 
-        # Starting point on circle (where s=0)
-        x0 = cx - sign * self.R * np.sin(self.theta0)
-        y0 = cy + sign * self.R * np.cos(self.theta0)
+        # Angle from center to the current point on the circle
+        angle_to_point = self.theta0 + sign * phi - sign * np.pi / 2
 
-        # Point at arc length s
-        angle_s = self.theta0 + phi
-        xs = cx - sign * self.R * np.sin(angle_s)
-        ys = cy + sign * self.R * np.cos(angle_s)
-
-        # Displacement from start
-        x = xs - x0
-        y = ys - y0
-        heading = self.theta0 + phi
+        x = cx + self.R * np.cos(angle_to_point)
+        y = cy + self.R * np.sin(angle_to_point)
+        heading = self.theta0 + sign * phi
 
         return (x, y, heading)
 

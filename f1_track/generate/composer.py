@@ -23,6 +23,58 @@ from f1_track.sim.car import F1Car
 from f1_track.sim.qss import LapSimulator
 
 
+def _close_track_loop(segments: list, ruleset) -> list:
+    """Append segments to close the track back to approximately (0, 0, heading~0).
+
+    Uses a 3-segment closure: arc1 (turn to face origin) + straight + arc2 (fix heading).
+    Only modifies the list if the endpoint is more than 20m from origin.
+    """
+    x, y, h = 0.0, 0.0, 0.0
+    for seg in segments:
+        dx, dy, hn = seg.end_point(h)
+        x += dx; y += dy; h = hn
+
+    dist = np.sqrt(x**2 + y**2)
+    if dist < 20.0:
+        h_norm = h % (2 * np.pi)
+        angle_fix = (-h_norm + np.pi) % (2 * np.pi) - np.pi
+        if abs(angle_fix) > 0.05:
+            R = max(80, abs(angle_fix) * 300)
+            segments.append(CircularTurn(R, angle_fix))
+        return segments
+
+    # Step 1: Turn to face origin
+    dir_to_origin = np.arctan2(-y, -x)
+    turn1 = (dir_to_origin - h + np.pi) % (2 * np.pi) - np.pi
+    R1 = max(80.0, dist * 0.4)
+    arc1 = CircularTurn(R1, turn1)
+    dx1, dy1, h1 = arc1.end_point(h)
+    x1, y1 = x + dx1, y + dy1
+
+    # Step 2: Straight toward origin (leave room for final arc)
+    dist2 = np.sqrt(x1**2 + y1**2)
+    straight_len = max(30.0, dist2 - R1 * 1.2)
+    straight = Straight(straight_len)
+    dx2 = straight_len * np.cos(h1)
+    dy2 = straight_len * np.sin(h1)
+    x2, y2 = x1 + dx2, y1 + dy2
+
+    # Step 3: Arc to close remaining gap
+    dist3 = np.sqrt(x2**2 + y2**2)
+    if dist3 < 5:
+        h_fix = (-h1 + np.pi) % (2 * np.pi) - np.pi
+        R3 = max(80.0, abs(h_fix) * 200)
+        arc2 = CircularTurn(R3, h_fix)
+    else:
+        dir3 = np.arctan2(-y2, -x2)
+        turn2 = (dir3 - h1 + np.pi) % (2 * np.pi) - np.pi
+        R3 = max(80.0, dist3 * 0.8)
+        arc2 = CircularTurn(R3, turn2)
+
+    segments.extend([arc1, straight, arc2])
+    return segments
+
+
 class TrackComposer:
     """Compose tracks from generation parameters and rulesets.
 
@@ -101,9 +153,11 @@ class TrackComposer:
         if params.mode == Mode.DEMO:
             return create_demo_segments()
         elif params.mode == Mode.AUTO:
-            return self._build_auto_segments(params, ruleset)
+            segments = self._build_auto_segments(params, ruleset)
+            return _close_track_loop(segments, ruleset)
         elif params.mode == Mode.MANUAL:
-            return self._build_manual_segments(params, ruleset)
+            segments = self._build_manual_segments(params, ruleset)
+            return _close_track_loop(segments, ruleset)
         else:
             raise ValueError(f"Unknown mode: {params.mode}")
 
