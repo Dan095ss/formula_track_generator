@@ -1,10 +1,15 @@
 """TrackSession: bundles Track aggregates, segment list, geometry,
 speed profile, generation parameters, and seed."""
-from dataclasses import dataclass
+from __future__ import annotations
 
-from f1_track.generate.params import GenParams
+from dataclasses import dataclass
+from typing import TYPE_CHECKING
+
 from f1_track.geometry.track import Track
 from .geometry import TrackGeometry
+
+if TYPE_CHECKING:
+    from f1_track.generate.params import GenParams
 
 
 @dataclass

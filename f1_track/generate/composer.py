@@ -16,6 +16,11 @@ from f1_track.geometry import (
     CircularTurn,
 )
 from f1_track.rules import RuleSet
+from f1_track.viz.geometry import build_centerline
+from f1_track.viz.elevation import generate_elevation
+from f1_track.viz.session import TrackSession
+from f1_track.sim.car import F1Car
+from f1_track.sim.qss import LapSimulator
 
 
 class TrackComposer:
@@ -49,6 +54,39 @@ class TrackComposer:
             return self._compose_manual(params, ruleset)
         else:
             raise ValueError(f"Unknown mode: {params.mode}")
+
+    def compose_full(self, params: GenParams, ruleset: RuleSet, seed: int = 0) -> TrackSession:
+        """Build full TrackSession: track + geometry + elevation + speed profile.
+
+        Args:
+            params: Generation parameters specifying mode and config
+            ruleset: Track rules and constraints
+            seed: PRNG seed for reproducibility
+
+        Returns:
+            TrackSession with track, segments, geometry, speed_profile, seed, params
+        """
+        np.random.seed(seed)
+        segments = self._build_segments(params, ruleset)
+        track = self._track_from_segments(segments, ruleset, params)
+
+        geometry = build_centerline(segments)
+        geometry.elevation = generate_elevation(
+            segments, geometry, max_change=track.max_elevation_change, seed=seed
+        )
+
+        car = F1Car()
+        sim = LapSimulator(car)
+        speed_profile = sim.simulate(geometry.s, geometry.curvature)
+
+        return TrackSession(
+            track=track,
+            segments=segments,
+            geometry=geometry,
+            speed_profile=speed_profile,
+            seed=seed,
+            params=params,
+        )
 
     def _build_segments(self, params: GenParams, ruleset: RuleSet) -> list:
         """Build the ordered segment list for the given params and ruleset.
