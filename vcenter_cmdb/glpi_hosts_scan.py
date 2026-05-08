@@ -308,7 +308,7 @@ def collect_glpi_data(**context):
 
         enriched_count = 0
         for item in all_data:
-            if item["type"] == "esxi" and item["hostname"]:
+            if item["hardware_type"] == "esxi" and item["hostname"]:
                 short_name = get_short_hostname(item["hostname"])
                 cluster = cluster_mapping.get(short_name, "N/A")
                 item["host_cluster"] = cluster
