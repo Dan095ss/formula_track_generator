@@ -9,6 +9,9 @@ from airflow.utils import timezone
 import pymysql
 from datetime import datetime
 import logging
+import requests
+from requests.auth import HTTPBasicAuth
+from airflow.models import Connection
 import ssl
 from pyVim.connect import SmartConnect, Disconnect
 from pyVmomi import vim
@@ -19,6 +22,8 @@ default_args = {
 }
 
 GLPI_INSTANCES = ["GLPI", "ADM_GLPI", "ADM_RZN_GLPI"]
+LEBOWSKI_BASE_URL = "https://lebowski.dns-shop.ru/services/hs/api"
+LEBOWSKI_CONN_ID = "lebowski_api"
 VCENTER_URL = Variable.get("VCENTER_URL")
 VCENTER_USERNAME = Variable.get("VCENTER_USERNAME")
 VCENTER_PASSWORD = Variable.get("VCENTER_PASSWORD")
@@ -86,6 +91,42 @@ def extract_role_env_from_comments_or_hostname(comments, hostname):
             role = "N/A"
 
     return role, environment
+
+
+def get_lebowski_session():
+    session = requests.Session()
+    try:
+        conn = Connection.get_connection_from_secrets(LEBOWSKI_CONN_ID)
+        session.auth = HTTPBasicAuth(conn.login, conn.password)
+    except Exception:
+        login = Variable.get("LEBOWSKI_LOGIN", default_var=None)
+        password = Variable.get("LEBOWSKI_PASSWORD", default_var=None)
+        if login and password:
+            session.auth = HTTPBasicAuth(login, password)
+        else:
+            logging.warning("Lebowski API: не найдены креды")
+    session.headers.update({"Accept": "application/json"})
+    return session
+
+
+def fetch_lebowski_owners() -> dict:
+    """Returns {subsystem_name.lower(): owner_name} from Lebowski /subsystems."""
+    result = {}
+    try:
+        session = get_lebowski_session()
+        r = session.get(f"{LEBOWSKI_BASE_URL}/subsystems", timeout=30)
+        if r.status_code == 200:
+            data = r.json()
+            if data.get("code") == 0 and isinstance(data.get("data"), list):
+                for sub in data["data"]:
+                    owner = sub.get("owner", {})
+                    owner_name = owner.get("name") if isinstance(owner, dict) else None
+                    sub_name = sub.get("name", "")
+                    if sub_name and owner_name and len(str(owner_name)) > 2:
+                        result[sub_name.lower()] = str(owner_name).strip()
+    except Exception as e:
+        logging.warning(f"Lebowski /subsystems: {e}")
+    return result
 
 
 def normalize_for_conn(os_name, os_version):

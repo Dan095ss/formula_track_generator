@@ -56,3 +56,67 @@ class TestHardwareTypeBugFixed(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestFetchLebowskiOwners(unittest.TestCase):
+
+    @patch('glpi_hosts_scan.requests')
+    @patch('glpi_hosts_scan.Connection')
+    def test_returns_owner_dict_on_success(self, mock_conn, mock_requests):
+        mock_conn.get_connection_from_secrets.return_value = MagicMock(
+            login="user", password="pass"
+        )
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "code": 0,
+            "message": "",
+            "data": [
+                {"id": "a", "name": "srv01", "owner": {"id": "b", "name": "Иванов Иван Иванович"}},
+                {"id": "c", "name": "SRV02", "owner": {"id": "d", "name": "Петров Пётр"}},
+            ]
+        }
+        mock_session = MagicMock()
+        mock_session.get.return_value = mock_response
+        mock_requests.Session.return_value = mock_session
+
+        import glpi_hosts_scan as m
+        result = m.fetch_lebowski_owners()
+
+        self.assertEqual(result["srv01"], "Иванов Иван Иванович")
+        self.assertEqual(result["srv02"], "Петров Пётр")
+
+    @patch('glpi_hosts_scan.requests')
+    @patch('glpi_hosts_scan.Connection')
+    def test_returns_empty_dict_on_network_error(self, mock_conn, mock_requests):
+        mock_conn.get_connection_from_secrets.side_effect = Exception("no conn")
+        mock_session = MagicMock()
+        mock_session.get.side_effect = Exception("timeout")
+        mock_requests.Session.return_value = mock_session
+
+        import glpi_hosts_scan as m
+        result = m.fetch_lebowski_owners()
+
+        self.assertEqual(result, {})
+
+    @patch('glpi_hosts_scan.requests')
+    @patch('glpi_hosts_scan.Connection')
+    def test_skips_entries_with_owner_name_too_short(self, mock_conn, mock_requests):
+        mock_conn.get_connection_from_secrets.return_value = MagicMock(login="u", password="p")
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "code": 0,
+            "message": "",
+            "data": [
+                {"id": "x", "name": "srv03", "owner": {"id": "y", "name": "AB"}},
+            ]
+        }
+        mock_session = MagicMock()
+        mock_session.get.return_value = mock_response
+        mock_requests.Session.return_value = mock_session
+
+        import glpi_hosts_scan as m
+        result = m.fetch_lebowski_owners()
+
+        self.assertNotIn("srv03", result)
