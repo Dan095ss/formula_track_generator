@@ -19,9 +19,10 @@ if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")  # type: ignore[attr-defined]
     sys.stderr.reconfigure(encoding="utf-8")  # type: ignore[attr-defined]
 
-from .config import PdfTarget, parse_pdf_filename
+from .config import PdfTarget, parse_pdf_filename, slugify
 from .extract import extract_pages
 from .render import render_note
+from .render_images import render_pdf_as_images, render_image_note
 from .sectionize import build_sections
 
 
@@ -87,11 +88,13 @@ def _iter_pdfs(root: Path, only: str | None):
 def _convert(src_pdf: Path, target: PdfTarget, out_root: Path, dry_run: bool, stats: RunStats) -> None:
     pages = extract_pages(src_pdf)
     sections = build_sections(pages)
-    if not sections:
-        stats.skipped.append(f"{target.file_name}: no sections")
-        return
 
     out_dir = out_root / target.out_subdir
+
+    if not sections:
+        _convert_as_images(src_pdf, target, out_dir, dry_run, stats)
+        return
+
     if not dry_run:
         out_dir.mkdir(parents=True, exist_ok=True)
 
@@ -107,6 +110,22 @@ def _convert(src_pdf: Path, target: PdfTarget, out_root: Path, dry_run: bool, st
             continue
         (out_dir / unique).write_text(md, encoding="utf-8")
         stats.notes_written += 1
+
+
+def _convert_as_images(src_pdf: Path, target: PdfTarget, out_dir: Path, dry_run: bool, stats: RunStats) -> None:
+    if dry_run:
+        print(f"[{target.chapter_code or '??'}] {target.file_name}  ->  PNG (diagram mode, dry-run)")
+        return
+    prefix = target.chapter_code or slugify(target.chapter_title_en)[:12]
+    images = render_pdf_as_images(src_pdf, out_dir / "pages", prefix=prefix)
+    if not images:
+        stats.skipped.append(f"{target.file_name}: empty PDF")
+        return
+    fname, md = render_image_note(target, images, out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    (out_dir / fname).write_text(md, encoding="utf-8")
+    stats.notes_written += 1
+    print(f"[{target.chapter_code or '??'}] {target.file_name}  ->  PNG x{len(images)}")
 
 
 def _ensure_unique(name: str, seen: set[str]) -> str:
