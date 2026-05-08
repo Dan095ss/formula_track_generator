@@ -1,0 +1,16 @@
+# Source PDFs (105 MB) — keep local, not in repo
+Mirage_1999_Service_Manual/
+
+# Run logs
+pdf_run.log
+*.log
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+
+# OS
+.DS_Store
+Thumbs.db

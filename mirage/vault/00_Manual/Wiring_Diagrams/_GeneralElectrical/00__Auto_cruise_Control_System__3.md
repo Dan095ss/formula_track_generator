@@ -1,0 +1,386 @@
+---
+type: manual_section
+vehicle: '[[Car_Mitsubishi_Mirage_1999]]'
+title: GeneralElectrical — Auto-cruise Control System
+title_en: GeneralElectrical — Auto-cruise Control System
+chapter_code: ''
+chapter: GeneralElectrical
+section: Auto-cruise Control System
+section_index: page-264
+volume: Wiring Diagrams
+source_pdf: GeneralElectrical.pdf
+page_range: 264-270
+page_count: 7
+topics: []
+aliases:
+- ' Auto-cruise Control System'
+- -Auto_cruise_Control_System
+- GeneralElectrical Auto-cruise Control System
+related_parts: []
+related_issues: []
+last_verified: '2026-05-08'
+tags:
+- manual
+---
+
+# GeneralElectrical — Auto-cruise Control System
+
+> **Глава:** `` GeneralElectrical  
+> **Источник:** `GeneralElectrical.pdf` (стр. 264-270)  
+> **Авто:** [[Car_Mitsubishi_Mirage_1999]]
+
+---
+
+267
+
+-
+
+B-61
+
+0. 8:
+
+k-W
+
+B-W 1
+
+.ANTI-LUCK BZAKING SYSTEM
+
+.AUTOMATIC SEAT BELT ,BUZZER .CHARGING SYSTEM .FJEL WARNING LILHI, 0
+
+B-V
+
+L-0 ,METER AND GAUGES .MFI SYSTFM COMB I NA r I ON METER 0
+
+LG-6
+
+2 @3 ,.4 0
+
+15A
+
+. n5R-k 2
+
+o a:
+
+R-W ,.l
+
+s rcp LIGHr SWITCH
+
+1
+
+NO CONNECTION 0
+
+ON
+
+0. 85G
+
+0. 85G L
+
+ANTI-LOCK ShAK I NG SYSTEM
+
+0. 85G
+
+3
+
+0. 85G 1 L STOP I GHT
+
+G
+
+’5
+
+15
+
+268
+
+AUTO-CRUISE CONTROL SYSTEM <M-1993 MODELS> (CONTINUED)
+
+I GNIT I ON
+
+i TCF (ACC)
+
+2
+
+E
+
+u 101
+
+101
+
+R-E IOD OR STORAGE CONNECTOR
+
+2L-i
+
+21 iJ-.
+
+21 1 2Lr RADIO AND TAPE PLAYER
+
+R-I 0 c 0
+
+CLOCK
+
+R-E
+
+RADIO AND TAPE PLAYER
+
+L
+
+R-E
+
+'0
+
+16
+
+COI,IJMN SWITCH RING (B-13) (3)
+
+AUTO-CRUISE CONTROL COAST
+
+L-R "I, 18
+
+V
+
+269
+
+I I I _ _ - .
+
+1 I G N I T I O N SWITCH(IG2)
+
+19
+
+R-W
+
+VE CATOK
+
+R-W
+
+.o
+
+11
+
+-
+
+- AUTO-CRUISZ (B05)
+
+-
+
+- CONTROL UNIT
+
+I TSB Revision I
+
+IGNITION
+
+VITCH (ST)
+
+2B-Y
+
+MFI SYSTEM 2B-y1
+
+2B-Y
+
+2B -Y
+
+2B Y
+
+5 1
+
+P ARK/NEUTRAL PCS I T I ON SWITCH (A-69)
+
+L%\
+
+2 X D 3 -
+
+2B-R
+
+(
+
+28-R
+
+MFI SYSTEM
+
+BATTERY
+
+1. 2t B-Y
+
+1 1
+
+STARTER
+
+270
+
+AUTO-CRUISE CONTROL SYSTEM <M-1993 MODELS> (CONTINUED)
+
+L
+
+0 0
+
+I TSB Revision 1
+
+272
+
+<M-FROM 1994 MODELS>
+
+r RELAY IGNITION SWITCH(IG1) , 2B-W I I
+
+TAILLIC
+
+DED I CATED FUSE
+
+(1994 MODELS) ,IGNITION SYSTEM .MFI SYSTEM
+
+G-W Gwl-
+
+I
+
+(G-W:
+
+-
+
+TAILLIGHT, PARKING AND SIDE-MARKER LIGHT AND LICENSE PLATE LIGHT 0 J'BE rs58)
+
+ILL (
+
+11 1 11
+
+~
+
+G-W
+
+CIGARETTE (B L I GHTER
+
+(B-Y)
+
+(G-W)
+
+(BlT
+
+AIR CONDITIONING SYSTEM ELC 4-SPFFD 0, 851 AUTOMAT I C TRANSAXLE HEATER METER AND GAUGES RADIO AND TAPE PLAYER TURN-SIGNAL LIGHT AND HAZARD LIGHT
+
+,CIGARETTE
+
+I. I GHTER .REAR WINDOW DEFOGGER
+
+' CIGARETTE LIGHTER REAR WINDOW DEFOGGER (B-Y)
+
+- r [
+
+G-ri
+
+B-Y .AIR CONDITIONING SYSTEM HEATER .METER AND GAUGES .TURN SIGNAL LIGHT AND HAZARD LIGHT RHE(
+
+110003608
+
+"9 !B-58:
+
+AUTO-CRUISE CONTROL MAIN SWITCH
+
+I I
+
+B-W
+
+AUTO-SRUISE 12 (9-05) COUTI3L UNIT l(E-62) r- I *
+
+21
+
+I 273
+
+.ANTFLOCK BRAKING SYSTEM .AUTOMATIC SEAT BELT
+
+(1994 MODELS) 0 BRAKE WARNING LIGH?
+
+AND OIL PRESSURE WARNING LIGHT
+
+'BUZZER .CHARGING SYSTEM .FUEL WARNING LIGHT
+
+COMBINATION METER (B-12) 1 J
+
+.METER AND GAUGES L-0 .MFI SYSTEM
+
+I I
+
+5
+
+3 m ,,4 0
+
+0.55 R-W B-W
+
+OFF t UFF
+
+-.
+
+NO CONNECTION (B-ll)
+
+LIGHT
+
+ANTI -LOCK BRAKING SYSTEM L
+
+0. 85(
+
+0. 55(
+
+0. 85G
+
+0. 85G 1 ST'OP L I GHT
+
+G
+
+5
+
+25
+
+I
+
+274
+
+AUTO-CRUISE CONTROL SYSTEM <A/T-FROM 1994 MODELS> (CONTINUED)
+
+TCH 0,CC) I GMI T I ON
+
+21 :"EV
+
+1 c g
+
+108
+
+(8-56) 2L-\ AUTOM4T C SE,AT BYL- (1994 MCDELS) EUZZE?
+
+CLOCK
+
+R-
+
+JEI-OEX)
+
+21 R L (B-6:
+
+O ( B - 5 6
+
+1 0 2Lr R-
+
+J/B
+
+21
+
+R A D I O AND TAPE PLAYEF I
+
+I I I AUTO-CRUISE I
+
+1. 7 25 r RADIO A!ID TAPE PLAYER
+
+C O K R O L SWTTCh (1)
+
+Y
+
+13 0
+
+MFI SYSTEM H L-R
+
+lo R I ia
+
+BACK UP
+
+I TSB Revision
+
+' DOMY dIGHT AMU-
+
+LUGGPGE CCHPHR MFN?
+
+LIG-IT
+
+I '
