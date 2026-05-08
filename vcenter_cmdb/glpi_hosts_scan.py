@@ -212,6 +212,8 @@ def collect_glpi_data(**context):
     ti = context["ti"]
     all_data = []
     esxi_hostnames = []
+    lebowski_owners = fetch_lebowski_owners()
+    logging.info(f"Lebowski: {len(lebowski_owners)} владельцев подсистем")
 
     for glpi_prefix in GLPI_INSTANCES:
         logging.info(f"Сбор данных из инстанса: {glpi_prefix}")
@@ -328,11 +330,18 @@ def collect_glpi_data(**context):
                             item["last_update"].strftime("%Y-%m-%d %H:%M:%S")
                             if isinstance(item["last_update"], datetime)
                             else "N/A"
-                        )
+                        ),
+                        "lebowski_filled": "",
                     }
 
                     if host_type == "esxi" and full_hostname:
                         esxi_hostnames.append(full_hostname)
+
+                    if clean_item["owner"] == "N/A" and shorthost:
+                        leb_owner = lebowski_owners.get(shorthost.lower())
+                        if leb_owner:
+                            clean_item["owner"] = leb_owner
+                            clean_item["lebowski_filled"] = "owner"
 
                     all_data.append(clean_item)
 

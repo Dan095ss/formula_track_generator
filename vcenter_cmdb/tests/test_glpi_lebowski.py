@@ -120,3 +120,43 @@ class TestFetchLebowskiOwners(unittest.TestCase):
         result = m.fetch_lebowski_owners()
 
         self.assertNotIn("srv03", result)
+
+
+class TestOwnerEnrichmentLogic(unittest.TestCase):
+    """Pure enrichment logic — no DAG imports needed."""
+
+    def _enrich(self, item: dict, lebowski_owners: dict) -> dict:
+        shorthost = item.get("shorthost", "")
+        if item["owner"] == "N/A" and shorthost:
+            leb_owner = lebowski_owners.get(shorthost.lower())
+            if leb_owner:
+                item["owner"] = leb_owner
+                item["lebowski_filled"] = "owner"
+        return item
+
+    def test_fills_owner_when_na_and_match_found(self):
+        item = {"owner": "N/A", "shorthost": "srv01", "lebowski_filled": ""}
+        owners = {"srv01": "Иванов Иван Иванович"}
+        result = self._enrich(item, owners)
+        self.assertEqual(result["owner"], "Иванов Иван Иванович")
+        self.assertEqual(result["lebowski_filled"], "owner")
+
+    def test_does_not_overwrite_existing_owner(self):
+        item = {"owner": "TeamOps", "shorthost": "srv01", "lebowski_filled": ""}
+        owners = {"srv01": "Иванов Иван Иванович"}
+        result = self._enrich(item, owners)
+        self.assertEqual(result["owner"], "TeamOps")
+        self.assertEqual(result["lebowski_filled"], "")
+
+    def test_owner_stays_na_when_host_not_in_lebowski(self):
+        item = {"owner": "N/A", "shorthost": "unknownhost", "lebowski_filled": ""}
+        owners = {"srv01": "Иванов Иван Иванович"}
+        result = self._enrich(item, owners)
+        self.assertEqual(result["owner"], "N/A")
+        self.assertEqual(result["lebowski_filled"], "")
+
+    def test_lookup_is_case_insensitive(self):
+        item = {"owner": "N/A", "shorthost": "SRV01", "lebowski_filled": ""}
+        owners = {"srv01": "Иванов Иван Иванович"}
+        result = self._enrich(item, owners)
+        self.assertEqual(result["owner"], "Иванов Иван Иванович")
