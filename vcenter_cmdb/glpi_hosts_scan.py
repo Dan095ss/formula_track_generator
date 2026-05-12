@@ -109,24 +109,69 @@ def get_lebowski_session():
     return session
 
 
-def fetch_lebowski_owners() -> dict:
-    """Returns {subsystem_name.lower(): owner_name} from Lebowski /subsystems."""
+def fetch_lebowski_server_index() -> dict:
+    """Возвращает {server_name.lower(): server_id} из /servers."""
     result = {}
     try:
         session = get_lebowski_session()
-        r = session.get(f"{LEBOWSKI_BASE_URL}/subsystems", timeout=30)
+        r = session.get(f"{LEBOWSKI_BASE_URL}/servers", timeout=30, verify=False)
+        logging.info(f"Lebowski /servers → HTTP {r.status_code}")
         if r.status_code == 200:
             data = r.json()
             if data.get("code") == 0 and isinstance(data.get("data"), list):
-                for sub in data["data"]:
-                    owner = sub.get("owner", {})
-                    owner_name = owner.get("name") if isinstance(owner, dict) else None
-                    sub_name = sub.get("name", "")
-                    if sub_name and owner_name and len(str(owner_name)) > 2:
-                        result[sub_name.lower()] = str(owner_name).strip()
+                for srv in data["data"]:
+                    if srv.get("name") and srv.get("id"):
+                        result[srv["name"].lower()] = srv["id"]
+                logging.info(f"Lebowski /servers: {len(result)} серверов в индексе")
+        elif r.status_code == 403:
+            logging.warning("Lebowski /servers: 403 Forbidden")
+        else:
+            logging.warning(f"Lebowski /servers: HTTP {r.status_code}")
     except Exception as e:
-        logging.warning(f"Lebowski /subsystems: {e}")
+        logging.warning(f"Lebowski /servers: {e}")
     return result
+
+
+def _extract_lebowski_team(detail: dict) -> str:
+    """Извлекает team.name из ответа /server/{id}."""
+    d = detail.get("data", detail) if isinstance(detail, dict) else detail
+    if not isinstance(d, dict):
+        return ""
+    team = d.get("team", {})
+    if isinstance(team, dict):
+        return str(team.get("name", "") or "").strip()
+    return str(team or "").strip()
+
+
+def make_lebowski_team_lookup(server_index: dict):
+    """
+    Возвращает функцию lookup(hostname) -> team_name.
+    Детали сервера загружаются лениво через /server/{id} и кэшируются.
+    """
+    session = get_lebowski_session()
+    cache: dict = {}
+
+    def lookup(hostname: str) -> str:
+        server_id = server_index.get(hostname.lower())
+        if not server_id:
+            return ""
+        if server_id in cache:
+            return cache[server_id]
+        try:
+            r = session.get(f"{LEBOWSKI_BASE_URL}/server/{server_id}", timeout=10, verify=False)
+            logging.debug(f"Lebowski /server/{server_id} ({hostname}) → HTTP {r.status_code}")
+            if r.status_code == 200:
+                team = _extract_lebowski_team(r.json())
+                cache[server_id] = team
+                if team:
+                    logging.info(f"Lebowski hit: '{hostname}' → team='{team}'")
+                return team
+        except Exception as e:
+            logging.debug(f"Lebowski /server/{server_id}: {e}")
+        cache[server_id] = ""
+        return ""
+
+    return lookup
 
 
 def normalize_for_conn(os_name, os_version):
@@ -212,8 +257,9 @@ def collect_glpi_data(**context):
     ti = context["ti"]
     all_data = []
     esxi_hostnames = []
-    lebowski_owners = fetch_lebowski_owners()
-    logging.info(f"Lebowski: {len(lebowski_owners)} владельцев подсистем")
+    lebowski_server_index = fetch_lebowski_server_index()
+    lebowski_lookup = make_lebowski_team_lookup(lebowski_server_index)
+    logging.info(f"Lebowski: {len(lebowski_server_index)} серверов в индексе")
 
     for glpi_prefix in GLPI_INSTANCES:
         logging.info(f"Сбор данных из инстанса: {glpi_prefix}")
@@ -338,9 +384,9 @@ def collect_glpi_data(**context):
                         esxi_hostnames.append(full_hostname)
 
                     if clean_item["owner"] == "N/A" and shorthost:
-                        leb_owner = lebowski_owners.get(shorthost.lower())
-                        if leb_owner:
-                            clean_item["owner"] = leb_owner
+                        team = lebowski_lookup(shorthost)
+                        if team:
+                            clean_item["owner"] = team
                             clean_item["lebowski_filled"] = "owner"
 
                     all_data.append(clean_item)
@@ -371,6 +417,8 @@ def collect_glpi_data(**context):
     else:
         logging.info("ESXi-хостов для обогащения не обнаружено")
 
+    leb_filled = sum(1 for item in all_data if item.get("lebowski_filled") == "owner")
+    logging.info(f"Lebowski: owner заполнен для {leb_filled}/{len(all_data)} хостов")
     logging.info(f"Всего собрано {len(all_data)} хостов (физические + ESXi)")
     ti.xcom_push(key="glpi_data", value=all_data)
 
