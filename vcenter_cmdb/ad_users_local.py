@@ -17,7 +17,10 @@ AD_PASSWORD = os.environ.get("AD_PASSWORD", "")
 AD_BASE_DN = os.environ.get("AD_BASE_DN", "")
 AD_USE_SSL = os.environ.get("AD_USE_SSL", "false").lower() == "true"
 AD_OUTPUT_PATH = os.environ.get("AD_OUTPUT_PATH", "/tmp/ad_users_dump.csv")
-AD_PAGE_SIZE = int(os.environ.get("AD_PAGE_SIZE", "500"))
+try:
+    AD_PAGE_SIZE = int(os.environ.get("AD_PAGE_SIZE", "500"))
+except ValueError:
+    AD_PAGE_SIZE = 500
 
 AD_FILTER = "(&(objectClass=user)(objectCategory=person))"
 
@@ -41,6 +44,7 @@ CSV_COLUMNS = [
 
 _WINDOWS_EPOCH = datetime(1601, 1, 1)
 _UAC_DISABLED = 0x2
+_AD_NEVER = 9223372036854775807  # 0x7FFFFFFFFFFFFFFF — AD sentinel for "never"
 
 
 # === ХЕЛПЕРЫ ===
@@ -84,9 +88,12 @@ def parse_windows_ts(raw) -> str:
         val = int(raw)
     except (TypeError, ValueError):
         return ""
-    if val <= 0:
+    if val <= 0 or val == _AD_NEVER:
         return ""
-    dt = _WINDOWS_EPOCH + timedelta(microseconds=val // 10)
+    try:
+        dt = _WINDOWS_EPOCH + timedelta(microseconds=val // 10)
+    except OverflowError:
+        return ""
     return dt.strftime("%Y-%m-%d %H:%M:%S")
 
 
@@ -94,7 +101,7 @@ def extract_manager_cn(dn: Optional[str]) -> str:
     if not dn:
         return ""
     m = re.match(r"CN=([^,]+)", dn, re.IGNORECASE)
-    return m.group(1) if m else dn
+    return m.group(1) if m else ""
 
 
 def parse_uac(uac) -> tuple:

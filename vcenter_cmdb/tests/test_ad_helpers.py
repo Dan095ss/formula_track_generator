@@ -1,6 +1,7 @@
 import sys
 import os
 import unittest
+from datetime import datetime
 
 sys.modules.update({
     'ldap3': __import__('unittest.mock', fromlist=['MagicMock']).MagicMock(),
@@ -53,6 +54,10 @@ class TestParseWindowsTs(unittest.TestCase):
         from ad_users_local import parse_windows_ts
         self.assertEqual(parse_windows_ts(132539328000000000), '2021-01-01 00:00:00')
 
+    def test_ad_never_sentinel_returns_empty(self):
+        from ad_users_local import parse_windows_ts
+        self.assertEqual(parse_windows_ts(9223372036854775807), '')
+
 
 class TestExtractManagerCn(unittest.TestCase):
     def test_standard_dn(self):
@@ -64,6 +69,10 @@ class TestExtractManagerCn(unittest.TestCase):
         from ad_users_local import extract_manager_cn
         self.assertEqual(extract_manager_cn(''), '')
         self.assertEqual(extract_manager_cn(None), '')
+
+    def test_no_cn_returns_empty(self):
+        from ad_users_local import extract_manager_cn
+        self.assertEqual(extract_manager_cn('OU=Users,DC=company,DC=local'), '')
 
 
 class TestParseUac(unittest.TestCase):
@@ -134,6 +143,44 @@ class TestMapEntryToRow(unittest.TestCase):
         self.assertEqual(row['manager'], 'Petrov P')
         self.assertEqual(row['location'], 'Moscow')
         self.assertEqual(row['EA5'], 'MS')
+
+
+class TestStrAndFirstRaw(unittest.TestCase):
+    def test_str_none(self):
+        from ad_users_local import _str
+        self.assertEqual(_str(None), '')
+
+    def test_str_list_first(self):
+        from ad_users_local import _str
+        self.assertEqual(_str(['hello', 'world']), 'hello')
+
+    def test_str_empty_list(self):
+        from ad_users_local import _str
+        self.assertEqual(_str([]), '')
+
+    def test_str_datetime(self):
+        from ad_users_local import _str
+        self.assertEqual(_str(datetime(2021, 6, 15, 12, 0, 0)), '2021-06-15 12:00:00')
+
+    def test_str_int(self):
+        from ad_users_local import _str
+        self.assertEqual(_str(42), '42')
+
+    def test_first_raw_none(self):
+        from ad_users_local import _first_raw
+        self.assertEqual(_first_raw(None), b'')
+
+    def test_first_raw_bytes(self):
+        from ad_users_local import _first_raw
+        self.assertEqual(_first_raw(b'\x01\x02'), b'\x01\x02')
+
+    def test_first_raw_list(self):
+        from ad_users_local import _first_raw
+        self.assertEqual(_first_raw([b'\xAB\xCD']), b'\xAB\xCD')
+
+    def test_first_raw_empty_list(self):
+        from ad_users_local import _first_raw
+        self.assertEqual(_first_raw([]), b'')
 
 
 if __name__ == '__main__':
