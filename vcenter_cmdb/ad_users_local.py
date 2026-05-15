@@ -159,3 +159,57 @@ def map_entry_to_row(attrs: dict, raw_attrs: dict) -> dict:
         "EA10":           _str(attrs.get("extensionAttribute10")),
         "description":    _str(attrs.get("description")),
     }
+
+
+# === ОСНОВНАЯ ФУНКЦИЯ ===
+
+def fetch_ad_users(output_path: str = AD_OUTPUT_PATH) -> int:
+    from ldap3 import Server, Connection, ALL, AUTO_BIND_NO_TLS, AUTO_BIND_TLS_BEFORE_BIND
+
+    if not AD_HOST or not AD_BIND_DN or not AD_BASE_DN:
+        raise ValueError("AD_HOST, AD_BIND_DN, AD_BASE_DN must be set via environment variables")
+
+    logger.info(f"Connecting to {AD_HOST} (SSL={AD_USE_SSL})")
+    server = Server(AD_HOST, get_info=ALL, use_ssl=AD_USE_SSL)
+    auto_bind = AUTO_BIND_TLS_BEFORE_BIND if AD_USE_SSL else AUTO_BIND_NO_TLS
+    conn = Connection(
+        server,
+        user=AD_BIND_DN,
+        password=AD_PASSWORD,
+        auto_bind=auto_bind,
+    )
+
+    logger.info(f"Searching base={AD_BASE_DN}, filter={AD_FILTER}, page_size={AD_PAGE_SIZE}")
+    entries = conn.extend.standard.paged_search(
+        search_base=AD_BASE_DN,
+        search_filter=AD_FILTER,
+        attributes=AD_LDAP_ATTRIBUTES,
+        paged_size=AD_PAGE_SIZE,
+        generator=False,
+    )
+
+    rows = []
+    for entry in entries:
+        if entry.get("type") != "searchResEntry":
+            continue
+        row = map_entry_to_row(
+            entry.get("attributes", {}),
+            entry.get("raw_attributes", {}),
+        )
+        rows.append(row)
+
+    conn.unbind()
+    logger.info(f"Fetched {len(rows)} accounts")
+
+    with open(output_path, "w", newline="", encoding="utf-8-sig") as f:
+        writer = csv.DictWriter(f, fieldnames=CSV_COLUMNS, extrasaction="ignore")
+        writer.writeheader()
+        writer.writerows(rows)
+
+    logger.info(f"Saved to {output_path}")
+    return len(rows)
+
+
+if __name__ == "__main__":
+    count = fetch_ad_users()
+    print(f"Done: {count} accounts written to {AD_OUTPUT_PATH}")
