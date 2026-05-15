@@ -180,25 +180,27 @@ def fetch_ad_users(output_path: str = AD_OUTPUT_PATH) -> int:
     )
 
     logger.info(f"Searching base={AD_BASE_DN}, filter={AD_FILTER}, page_size={AD_PAGE_SIZE}")
-    entries = conn.extend.standard.paged_search(
-        search_base=AD_BASE_DN,
-        search_filter=AD_FILTER,
-        attributes=AD_LDAP_ATTRIBUTES,
-        paged_size=AD_PAGE_SIZE,
-        generator=False,
-    )
-
-    rows = []
-    for entry in entries:
-        if entry.get("type") != "searchResEntry":
-            continue
-        row = map_entry_to_row(
-            entry.get("attributes", {}),
-            entry.get("raw_attributes", {}),
+    try:
+        entries = conn.extend.standard.paged_search(
+            search_base=AD_BASE_DN,
+            search_filter=AD_FILTER,
+            attributes=AD_LDAP_ATTRIBUTES,
+            paged_size=AD_PAGE_SIZE,
+            generator=False,
         )
-        rows.append(row)
 
-    conn.unbind()
+        rows = []
+        for entry in entries:
+            if entry.get("type") != "searchResEntry":
+                continue
+            row = map_entry_to_row(
+                entry.get("attributes", {}),
+                entry.get("raw_attributes", {}),
+            )
+            rows.append(row)
+    finally:
+        conn.unbind()
+
     logger.info(f"Fetched {len(rows)} accounts")
 
     with open(output_path, "w", newline="", encoding="utf-8-sig") as f:
