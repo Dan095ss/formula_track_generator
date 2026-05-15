@@ -1,4 +1,3 @@
-import csv
 import logging
 import re
 import struct
@@ -9,6 +8,7 @@ from typing import Optional
 from airflow import DAG
 from airflow.models import Variable
 from airflow.operators.python import PythonOperator
+from airflow.operators.trigger_dagrun import TriggerDagRunOperator
 from airflow.utils.dates import days_ago
 
 logger = logging.getLogger("airflow.task")
@@ -161,27 +161,26 @@ def map_entry_to_row(attrs: dict, raw_attrs: dict) -> dict:
 # === ЗАДАЧА DAG ===
 
 def fetch_ad_users(**context):
-    from ldap3 import Server, Connection, ALL, AUTO_BIND_NO_TLS, AUTO_BIND_TLS_BEFORE_BIND
+    from ldap3 import Server, Connection, ALL, AUTO_BIND_NO_TLS
 
-    ad_host = Variable.get("AD_HOST")
-    ad_bind_dn = Variable.get("AD_BIND_DN")
+    ti = context["ti"]
+
+    ad_server = Variable.get("AD_SERVER")
+    ad_user = Variable.get("AD_USER")
     ad_password = Variable.get("AD_PASSWORD")
     ad_base_dn = Variable.get("AD_BASE_DN")
-    ad_use_ssl = Variable.get("AD_USE_SSL", default_var="false").lower() == "true"
-    ad_output_path = Variable.get("AD_OUTPUT_PATH", default_var="/tmp/ad_users_dump.csv")
     try:
         ad_page_size = int(Variable.get("AD_PAGE_SIZE", default_var="500"))
     except ValueError:
         ad_page_size = 500
 
-    logger.info(f"Connecting to {ad_host} (SSL={ad_use_ssl})")
-    server = Server(ad_host, get_info=ALL, use_ssl=ad_use_ssl)
-    auto_bind = AUTO_BIND_TLS_BEFORE_BIND if ad_use_ssl else AUTO_BIND_NO_TLS
+    logger.info(f"Connecting to {ad_server}")
+    server = Server(ad_server, get_info=ALL)
     conn = Connection(
         server,
-        user=ad_bind_dn,
+        user=ad_user,
         password=ad_password,
-        auto_bind=auto_bind,
+        auto_bind=AUTO_BIND_NO_TLS,
     )
 
     logger.info(f"Searching base={ad_base_dn}, filter={AD_FILTER}, page_size={ad_page_size}")
@@ -207,14 +206,8 @@ def fetch_ad_users(**context):
         conn.unbind()
 
     logger.info(f"Fetched {len(rows)} accounts")
-
-    with open(ad_output_path, "w", newline="", encoding="utf-8-sig") as f:
-        writer = csv.DictWriter(f, fieldnames=CSV_COLUMNS, extrasaction="ignore")
-        writer.writeheader()
-        writer.writerows(rows)
-
-    logger.info(f"Saved {len(rows)} accounts to {ad_output_path}")
-    return len(rows)
+    ti.xcom_push(key="ACCOUNT", value=rows)
+    logger.info(f"Данные ({len(rows)} аккаунтов) сохранены в XCom")
 
 
 # === DAG ===
@@ -222,14 +215,26 @@ def fetch_ad_users(**context):
 with DAG(
     dag_id="ad_users_dump",
     default_args=default_args,
-    description="Выгрузка всех учётных записей AD в CSV",
-    schedule_interval="@daily",
+    description="Выгрузка всех учётных записей AD в CMDB",
+    schedule_interval="0 6 * * *",
     start_date=days_ago(1),
     catchup=False,
-    tags=["ad", "cmdb"],
+    tags=["ad", "cmdb", "account"],
 ) as dag:
 
-    task_fetch = PythonOperator(
+    collect_task = PythonOperator(
         task_id="fetch_ad_users",
         python_callable=fetch_ad_users,
     )
+
+    trigger_cmdb = TriggerDagRunOperator(
+        task_id="send_to_cmdb_account",
+        trigger_dag_id="cmdb_universal_uploader_v2",
+        conf={
+            "ke_type": "ACCOUNT",
+            "system": "ad",
+            "data": "{{ ti.xcom_pull(task_ids='fetch_ad_users', key='ACCOUNT') | tojson }}",
+        },
+    )
+
+    collect_task >> trigger_cmdb
