@@ -174,7 +174,7 @@ def fetch_ad_users(**context):
     except ValueError:
         ad_page_size = 500
 
-    logger.info(f"Connecting to {ad_server}")
+    logger.info(f"Подключение к {ad_server}, user={ad_user}")
     server = Server(ad_server, get_info=ALL)
     conn = Connection(
         server,
@@ -183,7 +183,7 @@ def fetch_ad_users(**context):
         auto_bind=AUTO_BIND_NO_TLS,
     )
 
-    logger.info(f"Searching base={ad_base_dn}, filter={AD_FILTER}, page_size={ad_page_size}")
+    logger.info(f"Поиск: base={ad_base_dn}, filter={AD_FILTER}, page_size={ad_page_size}")
     try:
         entries = conn.extend.standard.paged_search(
             search_base=ad_base_dn,
@@ -204,10 +204,11 @@ def fetch_ad_users(**context):
             rows.append(row)
     finally:
         conn.unbind()
+        logger.info("Соединение с AD закрыто")
 
-    logger.info(f"Fetched {len(rows)} accounts")
+    logger.info(f"Собрано {len(rows)} учётных записей")
     ti.xcom_push(key="ACCOUNT", value=rows)
-    logger.info(f"Данные ({len(rows)} аккаунтов) сохранены в XCom")
+    logger.info(f"Данные переданы в XCom: {len(rows)} записей -> cmdb_universal_uploader_v2")
 
 
 # === DAG ===
