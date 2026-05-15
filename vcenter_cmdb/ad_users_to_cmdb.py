@@ -202,6 +202,16 @@ def fetch_ad_users(**context):
                 entry.get("raw_attributes", {}),
             )
             rows.append(row)
+            login = row.get("sAMAccountName") or "?"
+            if len(rows) == 1:
+                logger.info(
+                    f"[1] Первая УЗ (тест): login={login} | status={row.get('status')} | "
+                    f"DisplayName={row.get('DisplayName')} | department={row.get('department')} | "
+                    f"position={row.get('position')} | manager={row.get('manager')} | "
+                    f"EA5={row.get('EA5')} | EA10={row.get('EA10')}"
+                )
+            else:
+                logger.info(f"[{len(rows)}] УЗ обработана: {login}")
     finally:
         conn.unbind()
         logger.info("Соединение с AD закрыто")
