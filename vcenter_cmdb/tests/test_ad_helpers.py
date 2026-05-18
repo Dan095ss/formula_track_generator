@@ -66,6 +66,10 @@ class TestParseWindowsTs(unittest.TestCase):
         from ad_users_to_cmdb import parse_windows_ts
         self.assertEqual(parse_windows_ts(9223372036854775807), '')
 
+    def test_datetime_object_formats_directly(self):
+        from ad_users_to_cmdb import parse_windows_ts
+        self.assertEqual(parse_windows_ts(datetime(2021, 1, 15, 10, 0, 0)), '2021-01-15 10:00:00')
+
 
 class TestExtractManagerCn(unittest.TestCase):
     def test_standard_dn(self):
@@ -113,7 +117,7 @@ class TestMapEntryToRow(unittest.TestCase):
             'userPrincipalName': 'ivanov.ia@company.local',
             'uid': 'E12345',
             'userAccountControl': 512,
-            'whenCreated': '2021-01-15 10:00:00',
+            'whenCreated': datetime(2021, 1, 15, 10, 0, 0),
             'pwdLastSet': 132539328000000000,
             'displayName': 'Ivanov Ivan',
             'department': 'IT',
