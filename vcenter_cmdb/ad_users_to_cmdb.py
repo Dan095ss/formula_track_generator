@@ -144,7 +144,7 @@ def map_entry_to_row(attrs: dict, raw_attrs: dict) -> dict:
         "account_type":   account_type,
         "source":         "AD",
         "status":         status,
-        "created_at":     parse_windows_ts(attrs.get("whenCreated")),
+        "created_at":     _str(attrs.get("whenCreated")),
         "last_password_change": parse_windows_ts(attrs.get("pwdLastSet")),
         "DisplayName":    _str(attrs.get("displayName")),
         "department":     _str(attrs.get("department")),

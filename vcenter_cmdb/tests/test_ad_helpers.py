@@ -117,7 +117,7 @@ class TestMapEntryToRow(unittest.TestCase):
             'userPrincipalName': 'ivanov.ia@company.local',
             'uid': 'E12345',
             'userAccountControl': 512,
-            'whenCreated': datetime(2021, 1, 15, 10, 0, 0),
+            'whenCreated': datetime(2021, 1, 15, 10, 0, 0),  # ldap3 returns GeneralizedTime as datetime
             'pwdLastSet': 132539328000000000,
             'displayName': 'Ivanov Ivan',
             'department': 'IT',
