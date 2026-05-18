@@ -152,7 +152,7 @@ def map_entry_to_row(attrs: dict, raw_attrs: dict) -> dict:
         "manager":        extract_manager_cn(_str(attrs.get("manager"))),
         "location":       _str(attrs.get("extensionAttribute12")),
         "EA5":            _str(attrs.get("extensionAttribute5")),
-        "EA8":            _str(attrs.get("extensionAttribute8")),
+        "EA8":            _str(attrs.get("extensionAttribute8")).lower(),
         "EA10":           _str(attrs.get("extensionAttribute10")),
         "description":    _str(attrs.get("description")),
     }

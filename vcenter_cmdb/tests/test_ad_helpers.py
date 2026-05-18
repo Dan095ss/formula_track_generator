@@ -151,6 +151,7 @@ class TestMapEntryToRow(unittest.TestCase):
         self.assertEqual(row['manager'], 'Petrov P')
         self.assertEqual(row['location'], 'Moscow')
         self.assertEqual(row['EA5'], 'MS')
+        self.assertEqual(row['EA8'], 'pc-ivanov')
 
 
 class TestStrAndFirstRaw(unittest.TestCase):
