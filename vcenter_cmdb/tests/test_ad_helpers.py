@@ -152,6 +152,8 @@ class TestMapEntryToRow(unittest.TestCase):
         self.assertEqual(row['location'], 'Moscow')
         self.assertEqual(row['EA5'], 'MS')
         self.assertEqual(row['EA8'], 'pc-ivanov')
+        self.assertEqual(row['created_at'], '2021-01-15 10:00:00')
+        self.assertEqual(row['last_password_change'], '2021-01-01 00:00:00')
 
 
 class TestStrAndFirstRaw(unittest.TestCase):
