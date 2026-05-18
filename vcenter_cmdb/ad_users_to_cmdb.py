@@ -116,10 +116,12 @@ def _str(val) -> str:
     if val is None:
         return ""
     if isinstance(val, list):
-        return str(val[0]) if val else ""
-    if isinstance(val, datetime):
-        return val.strftime("%Y-%m-%d %H:%M:%S")
-    return str(val)
+        s = str(val[0]) if val else ""
+    elif isinstance(val, datetime):
+        s = val.strftime("%Y-%m-%d %H:%M:%S")
+    else:
+        s = str(val)
+    return s.replace("'", "")
 
 
 def _first_raw(val) -> bytes:

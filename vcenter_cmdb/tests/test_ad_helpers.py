@@ -181,6 +181,12 @@ class TestStrAndFirstRaw(unittest.TestCase):
         from ad_users_to_cmdb import _str
         self.assertEqual(_str(42), '42')
 
+    def test_str_strips_single_quotes(self):
+        from ad_users_to_cmdb import _str
+        self.assertEqual(_str("Tat'yana"), 'Tatyana')
+        self.assertEqual(_str("Igor'"), 'Igor')
+        self.assertEqual(_str("Il'ya Dan'shin"), 'Ilya Danshin')
+
     def test_first_raw_none(self):
         from ad_users_to_cmdb import _first_raw
         self.assertEqual(_first_raw(None), b'')
