@@ -10,12 +10,13 @@ from airflow.utils.dates import days_ago
 logger = logging.getLogger("airflow.task")
 
 # === КОНФИГУРАЦИЯ ===
-# Airflow Variables: GP_1C_HOST, GP_1C_PORT, GP_1C_USER, GP_1C_PASSWORD, GP_1C_DATABASE
+# БД: cdc_current_state  |  схема: cdc.adm-1c-dns-m.dns_m  (в SQL уже прописана)
+# Airflow Variables: GP_1C_HOST, GP_1C_PORT, GP_1C_USER, GP_1C_PASSWORD
 GP_HOST = Variable.get("GP_1C_HOST")
 GP_PORT = int(Variable.get("GP_1C_PORT", default_var="5432"))
 GP_USER = Variable.get("GP_1C_USER")
 GP_PASSWORD = Variable.get("GP_1C_PASSWORD")
-GP_DATABASE = Variable.get("GP_1C_DATABASE")
+GP_DATABASE = "cdc_current_state"
 
 REF_TYPE_NAME = "Филиалы"
 
