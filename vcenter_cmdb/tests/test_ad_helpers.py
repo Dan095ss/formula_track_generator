@@ -139,14 +139,20 @@ class TestMapEntryToRow(unittest.TestCase):
     def test_row_keys(self):
         from ad_users_to_cmdb import map_entry_to_row, CSV_COLUMNS
         attrs, raw_attrs = self._make_entry()
-        row = map_entry_to_row(attrs, raw_attrs)
+        row = map_entry_to_row(attrs, raw_attrs, account_id=1)
         for col in CSV_COLUMNS:
             self.assertIn(col, row, f"Missing column: {col}")
+
+    def test_account_id_is_counter(self):
+        from ad_users_to_cmdb import map_entry_to_row
+        attrs, raw_attrs = self._make_entry()
+        self.assertEqual(map_entry_to_row(attrs, raw_attrs, account_id=1)['account_id'], 1)
+        self.assertEqual(map_entry_to_row(attrs, raw_attrs, account_id=42)['account_id'], 42)
 
     def test_row_values(self):
         from ad_users_to_cmdb import map_entry_to_row
         attrs, raw_attrs = self._make_entry()
-        row = map_entry_to_row(attrs, raw_attrs)
+        row = map_entry_to_row(attrs, raw_attrs, account_id=1)
         self.assertEqual(row['sAMAccountName'], 'ivanov.ia')
         self.assertEqual(row['source'], 'AD')
         self.assertEqual(row['status'], 'enabled')

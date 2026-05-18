@@ -26,6 +26,7 @@ AD_LDAP_ATTRIBUTES = [
 ]
 
 CSV_COLUMNS = [
+    "account_id",
     "sAMAccountName", "UPN", "SID", "UID", "GUID",
     "account_type", "source", "status",
     "created_at", "last_password_change",
@@ -134,10 +135,11 @@ def _first_raw(val) -> bytes:
     return b""
 
 
-def map_entry_to_row(attrs: dict, raw_attrs: dict) -> dict:
+def map_entry_to_row(attrs: dict, raw_attrs: dict, account_id: int = 0) -> dict:
     uac = attrs.get("userAccountControl") or 0
     status, account_type = parse_uac(uac)
     return {
+        "account_id":     account_id,
         "sAMAccountName": _str(attrs.get("sAMAccountName")),
         "UPN":            _str(attrs.get("userPrincipalName")),
         "SID":            parse_sid(_first_raw(raw_attrs.get("objectSid"))),
@@ -204,6 +206,7 @@ def fetch_ad_users(**context):
             row = map_entry_to_row(
                 entry.get("attributes", {}),
                 entry.get("raw_attributes", {}),
+                account_id=len(rows) + 1,
             )
             rows.append(row)
             login = row.get("sAMAccountName") or "?"
