@@ -1,24 +1,24 @@
 import logging
-
+import json
+import re
 import psycopg2
 from airflow import DAG
 from airflow.models import Variable
 from airflow.operators.python import PythonOperator
-from airflow.operators.trigger_dagrun import TriggerDagRunOperator
 from airflow.utils.dates import days_ago
+from airflow.api.common.trigger_dag import trigger_dag
+from airflow.utils import timezone
 
 logger = logging.getLogger("airflow.task")
 
 # === КОНФИГУРАЦИЯ ===
-# БД: cdc_current_state  |  схема: cdc.adm-1c-dns-m.dns_m  (в SQL уже прописана)
-# Airflow Variables: GP_1C_HOST, GP_1C_PORT, GP_1C_USER, GP_1C_PASSWORD
 GP_HOST = Variable.get("GP_1C_HOST")
 GP_PORT = int(Variable.get("GP_1C_PORT", default_var="5432"))
 GP_USER = Variable.get("GP_1C_USER")
 GP_PASSWORD = Variable.get("GP_1C_PASSWORD")
-GP_DATABASE = "cdc_current_state"
+GP_DATABASE = Variable.get("GP_1C_DATABASE")
 
-REF_TYPE_NAME = "Филиалы"
+REF_TYPE_NAME = "branches"
 
 _SQL = """
     SELECT
@@ -60,6 +60,20 @@ def _s(val) -> str:
     return str(val).strip()
 
 
+def clean_name(val: str) -> str:
+    """Чистит название фирмы/группы:
+    - снимает экранирование \" → "
+    - убирает всё в круглых скобках (включая сами скобки)
+    - схлопывает лишние пробелы
+    """
+    if not val:
+        return val
+    val = val.replace('\\"', '"')           # \" → "
+    val = re.sub(r'\([^)]*\)|\([^)]*$', '', val)  # убираем (...) и обрезанное (ЗА...
+    val = re.sub(r'\s{2,}', ' ', val)       # двойные пробелы → один
+    return val.strip()
+
+
 def fetch_firms(**context):
     ti = context["ti"]
     logger.info(f"GP: подключение к {GP_HOST}:{GP_PORT}/{GP_DATABASE}")
@@ -82,7 +96,6 @@ def fetch_firms(**context):
 
     logger.info(f"GP: получено {len(rows)} строк")
 
-    # Агрегация по ID фирмы: email-группы объединяются через "; "
     firms: dict = {}
     for row in rows:
         rec = dict(zip(columns, row))
@@ -90,16 +103,18 @@ def fetch_firms(**context):
         if not fid:
             continue
         if fid not in firms:
+            name = clean_name(_s(rec["name"]))
             firms[fid] = {
-                "id_1c":    fid,
-                "name":     _s(rec["name"]),
-                "number":   _s(rec["number"]),
-                "deleted":  _s(rec["deleted"]),
+                "id_1c": fid,
+                "name": name,
+                "number": _s(rec["number"]),
+                "deleted": _s(rec["deleted"]),
                 "ter_lvl_1": _s(rec["ter_lvl_1"]),
                 "ter_lvl_2": _s(rec["ter_lvl_2"]),
                 "ter_lvl_3": _s(rec["ter_lvl_3"]),
-                "_groups":  [],
-                "_emails":  [],
+                "_groups": [],
+                "_emails": [],
+                "name_for_link": name,
             }
         if rec.get("email_group_name"):
             firms[fid]["_groups"].append(_s(rec["email_group_name"]))
@@ -108,24 +123,55 @@ def fetch_firms(**context):
 
     records = [
         {
-            "id_1c":             f["id_1c"],
-            "name":              f["name"],
-            "number":            f["number"],
-            "deleted":           f["deleted"],
-            "ter_lvl_1":         f["ter_lvl_1"],
-            "ter_lvl_2":         f["ter_lvl_2"],
-            "ter_lvl_3":         f["ter_lvl_3"],
+            "id_1c": f["id_1c"],
+            "name": f["name"],
+            "number": f["number"],
+            "deleted": f["deleted"],
+            "ter_lvl_1": f["ter_lvl_1"],
+            "ter_lvl_2": f["ter_lvl_2"],
+            "ter_lvl_3": f["ter_lvl_3"],
             "email_group_names": "; ".join(f["_groups"]),
-            "emails":            "; ".join(f["_emails"]),
+            "emails": "; ".join(f["_emails"]),
+            "name_for_link": f["name_for_link"]
         }
         for f in firms.values()
     ]
 
     logger.info(f"Подготовлено {len(records)} уникальных фирм для CMDB")
+
+    # Пушим как Python-объект (список словарей), НЕ как JSON-строку
     ti.xcom_push(key="FIRMS", value=records)
 
 
-# === DAG ===
+def trigger_cmdb_loader(**context):
+    """Запускает cmdb_ref_uploader с передачей данных как Python-объекта"""
+    ti = context["ti"]
+
+    # Тянем данные как Python-объект
+    records = ti.xcom_pull(task_ids='fetch_firms', key='FIRMS')
+
+    if not records:
+        raise ValueError("Нет данных для передачи в cmdb_ref_uploader")
+
+    logger.info(f"Запуск cmdb_ref_uploader с {len(records)} записями")
+
+    # Формируем conf с Python-объектом (не сериализуем в JSON)
+    conf = {
+        "ref_type_name": REF_TYPE_NAME,
+        "system": "1c_greenplum",
+        "data": records,  # ← Python list[dict], кириллица сохранится
+    }
+
+    # Запускаем целевой DAG через trigger_dag (как в glpi_hosts_scan)
+    dag_run = trigger_dag(
+        dag_id='cmdb_ref_uploader',
+        run_id=f"triggered__firms_{timezone.utcnow().strftime('%Y%m%dT%H%M%S')}",
+        conf=conf,
+        replace_microseconds=False,
+    )
+
+    logger.info(f"Запущен cmdb_ref_uploader: run_id={dag_run.run_id}")
+
 
 default_args = {
     "owner": "Sevryuk.DA@dns-shop.ru",
@@ -134,27 +180,22 @@ default_args = {
 }
 
 with DAG(
-    dag_id="firms_to_cmdb",
-    default_args=default_args,
-    schedule_interval="0 7 * * *",
-    start_date=days_ago(1),
-    catchup=False,
-    tags=["inventory", "1c", "firms", "cmdb", "ref"],
+        dag_id="firms_to_cmdb",
+        default_args=default_args,
+        schedule_interval="0 7 * * *",
+        start_date=days_ago(1),
+        catchup=False,
+        tags=["inventory", "1c", "firms", "cmdb", "ref"],
 ) as dag:
-
     fetch_task = PythonOperator(
         task_id="fetch_firms",
         python_callable=fetch_firms,
     )
 
-    trigger_uploader = TriggerDagRunOperator(
+    # Используем PythonOperator вместо TriggerDagRunOperator
+    trigger_task = PythonOperator(
         task_id="send_to_cmdb_ref",
-        trigger_dag_id="cmdb_ref_uploader",
-        conf={
-            "ref_type_name": REF_TYPE_NAME,
-            "system": "1c_greenplum",
-            "data": "{{ ti.xcom_pull(task_ids='fetch_firms', key='FIRMS') | tojson }}",
-        },
+        python_callable=trigger_cmdb_loader,
     )
 
-    fetch_task >> trigger_uploader
+    fetch_task >> trigger_task
