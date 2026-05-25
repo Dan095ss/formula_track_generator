@@ -57,14 +57,17 @@ CSV_COLUMNS = [
 # ── HTTP ──────────────────────────────────────────────────────────────────────
 def make_session() -> requests.Session:
     s = requests.Session()
-    s.headers.update({"Accept": "application/json"})
+    # внутренний хост — отключаем корпоративный прокси из env (HTTPS_PROXY/HTTP_PROXY)
+    s.trust_env = False
     return s
 
 
-def api_get(session: requests.Session, url: str, params: dict) -> dict:
+def api_get_json(session: requests.Session, url: str, params: dict = None) -> dict:
+    """Обычный JSON-запрос (для метаданных топика)."""
     for attempt in range(1, RETRY_ATTEMPTS + 1):
         try:
-            r = session.get(url, params=params, timeout=REQUEST_TIMEOUT, verify=False)
+            r = session.get(url, params=params or {}, timeout=REQUEST_TIMEOUT,
+                            verify=False, headers={"Accept": "application/json"})
             if r.status_code == 200:
                 return r.json()
             log.warning(f"HTTP {r.status_code} — {url} (попытка {attempt})")
@@ -75,10 +78,47 @@ def api_get(session: requests.Session, url: str, params: dict) -> dict:
     raise RuntimeError(f"Не удалось получить ответ от {url} после {RETRY_ATTEMPTS} попыток")
 
 
+def fetch_sse_messages(session: requests.Session, url: str, params: dict) -> list[dict]:
+    """Читает SSE-стрим Kafka UI, возвращает список сырых message-объектов."""
+    messages = []
+    for attempt in range(1, RETRY_ATTEMPTS + 1):
+        try:
+            r = session.get(url, params=params, timeout=REQUEST_TIMEOUT,
+                            verify=False, stream=True)
+            if r.status_code != 200:
+                log.warning(f"HTTP {r.status_code} — {url} (попытка {attempt})")
+                if attempt < RETRY_ATTEMPTS:
+                    time.sleep(RETRY_DELAY)
+                continue
+            for raw_line in r.iter_lines():
+                if not raw_line:
+                    continue
+                line = raw_line.decode("utf-8") if isinstance(raw_line, bytes) else raw_line
+                if not line.startswith("data:"):
+                    continue
+                try:
+                    event = json.loads(line[5:].strip())
+                except json.JSONDecodeError:
+                    continue
+                etype = event.get("type")
+                if etype == "MESSAGE":
+                    msg = event.get("message") or {}
+                    if msg:
+                        messages.append(msg)
+                elif etype == "DONE":
+                    break
+            return messages
+        except requests.RequestException as e:
+            log.warning(f"Ошибка SSE-стрима: {e} (попытка {attempt})")
+            if attempt < RETRY_ATTEMPTS:
+                time.sleep(RETRY_DELAY)
+    raise RuntimeError(f"Не удалось получить SSE от {url} после {RETRY_ATTEMPTS} попыток")
+
+
 # ── Метаданные топика ─────────────────────────────────────────────────────────
 def get_partition_count(session: requests.Session, base_url: str) -> int:
     url = f"{base_url}/api/clusters/{CLUSTER}/topics/{TOPIC}"
-    data = api_get(session, url, {})
+    data = api_get_json(session, url)
     count = data.get("partitionCount") or len(data.get("partitions", [])) or 1
     log.info(f"Топик {TOPIC}: {count} партиций")
     return count
@@ -147,7 +187,7 @@ def fetch_partition(
     partition: int,
     since_ts_ms: int,
 ) -> list[dict]:
-    """Скачивает все сообщения из одной партиции начиная с since_ts_ms."""
+    """Скачивает все сообщения из одной партиции начиная с since_ts_ms через SSE."""
     url = f"{base_url}/api/clusters/{CLUSTER}/topics/{TOPIC}/messages"
     records = []
     seek_type = "TIMESTAMP"
@@ -164,38 +204,23 @@ def fetch_partition(
             "keySerde":   "String",
             "valueSerde": "String",
         }
-        data = api_get(session, url, params)
-
-        messages = data if isinstance(data, list) else data.get("messages", data.get("content", []))
+        messages = fetch_sse_messages(session, url, params)
         if not messages:
             break
 
-        batch_records = []
         for msg in messages:
-            # пропускаем сообщения старше окна
-            msg_ts = msg.get("timestamp", 0)
-            if isinstance(msg_ts, str):
-                try:
-                    msg_ts = int(datetime.fromisoformat(msg_ts.rstrip("Z")).replace(tzinfo=timezone.utc).timestamp() * 1000)
-                except ValueError:
-                    msg_ts = 0
-            if msg_ts < since_ts_ms:
-                continue
             parsed = parse_message(msg)
             if parsed:
-                batch_records.append(parsed)
+                records.append(parsed)
 
-        records.extend(batch_records)
         total_fetched += len(messages)
-
-        # пагинация: следующий seek — offset последнего сообщения + 1
         last_offset = messages[-1].get("offset")
+
         if last_offset is None or len(messages) < BATCH_SIZE:
             break
 
         seek_type = "OFFSET"
         seek_to   = f"{partition}:{last_offset + 1}"
-
         log.info(f"  Партиция {partition}: получено {total_fetched}, следующий offset={last_offset + 1}")
 
     log.info(f"  Партиция {partition}: итого {len(records)} записей (из {total_fetched} сообщений)")
