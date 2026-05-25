@@ -1,12 +1,17 @@
 #!/usr/bin/env python3
 """
-Дамп топика ha_logs из Kafka UI за последние 24 часа.
-Сохраняет: ha_logs_YYYYMMDD_HHMMSS.ndjson + ha_logs_YYYYMMDD_HHMMSS.csv
+Снапшот топика ha_logs через Kafka UI REST API.
+
+ОГРАНИЧЕНИЕ ПЛАТФОРМЫ:
+  Kafka UI v1.0 (эта инсталляция) поддерживает максимум 500 сообщений за запрос.
+  OFFSET/TIMESTAMP-пагинация недоступна — сервер возвращает 500.
+  Брокеры доступны только по внутреннему k8s DNS (.svc) — прямое подключение невозможно.
+  Скрипт получает до 500 актуальных сообщений из текущей позиции Kafka UI consumer.
 
 Запуск:
     python kafka_ha_logs_dump.py
-    python kafka_ha_logs_dump.py --hours 48
-    python kafka_ha_logs_dump.py --base-url http://kafka-ui.sl-k8s.dns-shop.ru
+    python kafka_ha_logs_dump.py --limit 500
+    python kafka_ha_logs_dump.py --base-url https://kafka-ui.sl-k8s.dns-shop.ru
 """
 
 import argparse
@@ -14,22 +19,22 @@ import csv
 import json
 import logging
 import sys
-import time
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone
 from pathlib import Path
 
 import requests
 import urllib3
+
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # ── Настройки ────────────────────────────────────────────────────────────────
-KAFKA_UI_BASE = "https://kafka-ui.sl-k8s.dns-shop.ru"
-CLUSTER       = "local"
-TOPIC         = "ha_logs"
-BATCH_SIZE    = 500          # сообщений за один запрос (макс. ~500 у kafka-ui)
-REQUEST_TIMEOUT = 30         # секунды
+KAFKA_UI_BASE   = "https://kafka-ui.sl-k8s.dns-shop.ru"
+CLUSTER         = "local"
+TOPIC           = "ha_logs"
+MAX_LIMIT       = 500          # жёсткий предел API (>500 → откат к 100)
+REQUEST_TIMEOUT = 60
 RETRY_ATTEMPTS  = 3
-RETRY_DELAY     = 5          # секунды между ретраями
+RETRY_DELAY     = 5
 
 OUTPUT_DIR = Path(__file__).parent
 
@@ -40,12 +45,10 @@ logging.basicConfig(
 )
 log = logging.getLogger(__name__)
 
-# ── CSV-колонки (плоская структура outer + inner message) ─────────────────────
+# ── CSV-колонки ───────────────────────────────────────────────────────────────
 CSV_COLUMNS = [
-    # outer
     "kafka_offset", "kafka_partition", "kafka_timestamp",
     "datacenter", "host", "file", "source_type", "outer_timestamp",
-    # inner (HAProxy)
     "timestamp_haproxy", "frontend_name", "hostname", "frontend_port",
     "remote_ip", "backend_name", "server_name", "active_time_req",
     "responseStatus", "bytesSent", "requestType", "requestUrl",
@@ -57,107 +60,95 @@ CSV_COLUMNS = [
 # ── HTTP ──────────────────────────────────────────────────────────────────────
 def make_session() -> requests.Session:
     s = requests.Session()
-    # внутренний хост — отключаем корпоративный прокси из env (HTTPS_PROXY/HTTP_PROXY)
-    s.trust_env = False
+    s.trust_env = False  # обходим корпоративный HTTPS_PROXY
     return s
 
 
-def api_get_json(session: requests.Session, url: str, params: dict = None) -> dict:
-    """Обычный JSON-запрос (для метаданных топика)."""
-    for attempt in range(1, RETRY_ATTEMPTS + 1):
-        try:
-            r = session.get(url, params=params or {}, timeout=REQUEST_TIMEOUT,
-                            verify=False, headers={"Accept": "application/json"})
-            if r.status_code == 200:
-                return r.json()
-            log.warning(f"HTTP {r.status_code} — {url} (попытка {attempt})")
-        except requests.RequestException as e:
-            log.warning(f"Ошибка запроса: {e} (попытка {attempt})")
-        if attempt < RETRY_ATTEMPTS:
-            time.sleep(RETRY_DELAY)
-    raise RuntimeError(f"Не удалось получить ответ от {url} после {RETRY_ATTEMPTS} попыток")
-
-
-def fetch_sse_messages(session: requests.Session, url: str, params: dict) -> list[dict]:
-    """Читает SSE-стрим Kafka UI, возвращает список сырых message-объектов."""
-    messages = []
+def fetch_sse(session: requests.Session, url: str, params: dict) -> tuple[list[dict], dict]:
+    """Читает SSE-стрим, возвращает (messages, consuming_stats)."""
+    import time
     for attempt in range(1, RETRY_ATTEMPTS + 1):
         try:
             r = session.get(url, params=params, timeout=REQUEST_TIMEOUT,
                             verify=False, stream=True)
             if r.status_code != 200:
-                log.warning(f"HTTP {r.status_code} — {url} (попытка {attempt})")
+                log.warning(f"HTTP {r.status_code} (попытка {attempt}): {r.text[:200]}")
                 if attempt < RETRY_ATTEMPTS:
                     time.sleep(RETRY_DELAY)
                 continue
-            for raw_line in r.iter_lines():
-                if not raw_line:
+
+            messages, consuming = [], {}
+            for raw in r.iter_lines():
+                if not raw:
                     continue
-                line = raw_line.decode("utf-8") if isinstance(raw_line, bytes) else raw_line
+                line = raw.decode("utf-8") if isinstance(raw, bytes) else raw
                 if not line.startswith("data:"):
                     continue
                 try:
-                    event = json.loads(line[5:].strip())
+                    ev = json.loads(line[5:].strip())
                 except json.JSONDecodeError:
                     continue
-                etype = event.get("type")
-                if etype == "MESSAGE":
-                    msg = event.get("message") or {}
-                    if msg:
-                        messages.append(msg)
-                elif etype == "DONE":
+                t = ev.get("type")
+                if t == "MESSAGE" and ev.get("message"):
+                    messages.append(ev["message"])
+                elif t == "DONE":
+                    consuming = ev.get("consuming") or {}
                     break
-            return messages
+            return messages, consuming
+
         except requests.RequestException as e:
-            log.warning(f"Ошибка SSE-стрима: {e} (попытка {attempt})")
+            log.warning(f"Ошибка SSE: {e} (попытка {attempt})")
             if attempt < RETRY_ATTEMPTS:
                 time.sleep(RETRY_DELAY)
-    raise RuntimeError(f"Не удалось получить SSE от {url} после {RETRY_ATTEMPTS} попыток")
+    raise RuntimeError(f"Не удалось получить данные после {RETRY_ATTEMPTS} попыток")
 
 
 # ── Метаданные топика ─────────────────────────────────────────────────────────
-def get_partition_count(session: requests.Session, base_url: str) -> int:
+def get_topic_meta(session: requests.Session, base_url: str) -> dict:
+    import time
     url = f"{base_url}/api/clusters/{CLUSTER}/topics/{TOPIC}"
-    data = api_get_json(session, url)
-    count = data.get("partitionCount") or len(data.get("partitions", [])) or 1
-    log.info(f"Топик {TOPIC}: {count} партиций")
-    return count
+    for attempt in range(1, RETRY_ATTEMPTS + 1):
+        try:
+            r = session.get(url, verify=False, timeout=REQUEST_TIMEOUT,
+                            headers={"Accept": "application/json"})
+            if r.status_code == 200:
+                return r.json()
+            log.warning(f"Метаданные: HTTP {r.status_code}")
+        except Exception as e:
+            log.warning(f"Метаданные: {e}")
+        if attempt < RETRY_ATTEMPTS:
+            time.sleep(RETRY_DELAY)
+    raise RuntimeError("Не удалось получить метаданные топика")
 
 
 # ── Парсинг сообщения ─────────────────────────────────────────────────────────
 def parse_message(msg: dict) -> dict | None:
-    """Разбирает одно сообщение Kafka UI → плоский словарь."""
-    raw_value = msg.get("content") or msg.get("value") or ""
-    if isinstance(raw_value, dict):
-        outer = raw_value
+    raw = msg.get("content") or msg.get("value") or ""
+    if isinstance(raw, dict):
+        outer = raw
     else:
         try:
-            outer = json.loads(raw_value)
+            outer = json.loads(raw)
         except (json.JSONDecodeError, TypeError):
-            log.debug(f"Не удалось распарсить value offset={msg.get('offset')}")
             return None
 
     inner_raw = outer.get("message", "")
-    if isinstance(inner_raw, dict):
-        inner = inner_raw
-    else:
+    inner = inner_raw if isinstance(inner_raw, dict) else {}
+    if not inner:
         try:
             inner = json.loads(inner_raw)
         except (json.JSONDecodeError, TypeError):
             inner = {}
 
     return {
-        # kafka meta
-        "kafka_offset":    msg.get("offset"),
-        "kafka_partition": msg.get("partition"),
-        "kafka_timestamp": msg.get("timestamp"),
-        # outer
-        "datacenter":      outer.get("datacenter", ""),
-        "host":            outer.get("host", ""),
-        "file":            outer.get("file", ""),
-        "source_type":     outer.get("source_type", ""),
-        "outer_timestamp": outer.get("timestamp", ""),
-        # inner (HAProxy)
+        "kafka_offset":      msg.get("offset"),
+        "kafka_partition":   msg.get("partition"),
+        "kafka_timestamp":   msg.get("timestamp"),
+        "datacenter":        outer.get("datacenter", ""),
+        "host":              outer.get("host", ""),
+        "file":              outer.get("file", ""),
+        "source_type":       outer.get("source_type", ""),
+        "outer_timestamp":   outer.get("timestamp", ""),
         "timestamp_haproxy": inner.get("timestamp_haproxy", ""),
         "frontend_name":     inner.get("frontend_name", ""),
         "hostname":          inner.get("hostname", ""),
@@ -180,64 +171,15 @@ def parse_message(msg: dict) -> dict | None:
     }
 
 
-# ── Основной сбор ─────────────────────────────────────────────────────────────
-def fetch_partition(
-    session: requests.Session,
-    base_url: str,
-    partition: int,
-    since_ts_ms: int,
-) -> list[dict]:
-    """Скачивает все сообщения из одной партиции начиная с since_ts_ms через SSE."""
-    url = f"{base_url}/api/clusters/{CLUSTER}/topics/{TOPIC}/messages"
-    records = []
-    seek_type = "TIMESTAMP"
-    seek_to   = f"{partition}:{since_ts_ms}"
-    total_fetched = 0
-
-    log.info(f"  Партиция {partition}: старт с ts={since_ts_ms}")
-
-    while True:
-        params = {
-            "seekType":   seek_type,
-            "seekTo":     seek_to,
-            "limit":      BATCH_SIZE,
-            "keySerde":   "String",
-            "valueSerde": "String",
-        }
-        messages = fetch_sse_messages(session, url, params)
-        if not messages:
-            break
-
-        for msg in messages:
-            parsed = parse_message(msg)
-            if parsed:
-                records.append(parsed)
-
-        total_fetched += len(messages)
-        last_offset = messages[-1].get("offset")
-
-        if last_offset is None or len(messages) < BATCH_SIZE:
-            break
-
-        seek_type = "OFFSET"
-        seek_to   = f"{partition}:{last_offset + 1}"
-        log.info(f"  Партиция {partition}: получено {total_fetched}, следующий offset={last_offset + 1}")
-
-    log.info(f"  Партиция {partition}: итого {len(records)} записей (из {total_fetched} сообщений)")
-    return records
-
-
 # ── Запись файлов ─────────────────────────────────────────────────────────────
 def write_outputs(records: list[dict], run_ts: str) -> tuple[Path, Path]:
     ndjson_path = OUTPUT_DIR / f"ha_logs_{run_ts}.ndjson"
     csv_path    = OUTPUT_DIR / f"ha_logs_{run_ts}.csv"
 
-    log.info(f"Запись NDJSON → {ndjson_path}")
     with open(ndjson_path, "w", encoding="utf-8") as f:
         for rec in records:
             f.write(json.dumps(rec, ensure_ascii=False) + "\n")
 
-    log.info(f"Запись CSV → {csv_path}")
     with open(csv_path, "w", encoding="utf-8-sig", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=CSV_COLUMNS, extrasaction="ignore")
         writer.writeheader()
@@ -248,49 +190,73 @@ def write_outputs(records: list[dict], run_ts: str) -> tuple[Path, Path]:
 
 # ── CLI ───────────────────────────────────────────────────────────────────────
 def parse_args():
-    p = argparse.ArgumentParser(description="Дамп ha_logs из Kafka UI")
-    p.add_argument("--base-url", default=KAFKA_UI_BASE, help="Base URL Kafka UI")
-    p.add_argument("--hours",    type=int, default=24,   help="Глубина выгрузки в часах (default: 24)")
+    p = argparse.ArgumentParser(description="Снапшот ha_logs из Kafka UI (макс. 500 сообщений)")
+    p.add_argument("--base-url", default=KAFKA_UI_BASE)
+    p.add_argument("--limit",    type=int, default=MAX_LIMIT,
+                   help=f"Кол-во сообщений (max {MAX_LIMIT})")
     return p.parse_args()
 
 
 def main():
     args = parse_args()
-    run_ts   = datetime.now().strftime("%Y%m%d_%H%M%S")
-    since_dt = datetime.now(timezone.utc) - timedelta(hours=args.hours)
-    since_ms = int(since_dt.timestamp() * 1000)
+    limit   = min(args.limit, MAX_LIMIT)
+    run_ts  = datetime.now().strftime("%Y%m%d_%H%M%S")
 
     log.info(f"Kafka UI:  {args.base_url}")
     log.info(f"Топик:     {TOPIC}  |  Кластер: {CLUSTER}")
-    log.info(f"Период:    последние {args.hours}ч (с {since_dt.isoformat()})")
+    log.info(f"Лимит:     {limit} сообщений (API max={MAX_LIMIT})")
 
     session = make_session()
 
+    # Метаданные топика
     try:
-        partitions = get_partition_count(session, args.base_url)
+        meta = get_topic_meta(session, args.base_url)
+        partitions = meta.get("partitions", [])
+        log.info(f"Партиций: {len(partitions)}")
+        for p in partitions:
+            log.info(f"  p={p['partition']}: offsetMin={p['offsetMin']} offsetMax={p['offsetMax']} "
+                     f"(~{p['offsetMax'] - p['offsetMin']:,} сообщений в топике)")
     except Exception as e:
-        log.error(f"Не удалось получить метаданные топика: {e}")
+        log.error(f"Метаданные: {e}")
         sys.exit(1)
 
-    all_records: list[dict] = []
-    for p in range(partitions):
-        try:
-            recs = fetch_partition(session, args.base_url, p, since_ms)
-            all_records.extend(recs)
-        except Exception as e:
-            log.error(f"Ошибка при сборе партиции {p}: {e}")
+    # Один запрос — BEGINNING, все партиции разом
+    url = f"{args.base_url}/api/clusters/{CLUSTER}/topics/{TOPIC}/messages"
+    params = {
+        "seekType":   "BEGINNING",
+        "limit":      limit,
+        "keySerde":   "String",
+        "valueSerde": "String",
+    }
 
-    all_records.sort(key=lambda r: (r.get("kafka_timestamp") or "", r.get("kafka_offset") or 0))
+    log.info("Получение сообщений...")
+    try:
+        raw_msgs, stats = fetch_sse(session, url, params)
+    except RuntimeError as e:
+        log.error(str(e))
+        sys.exit(1)
 
-    log.info(f"Всего записей: {len(all_records)}")
+    log.info(f"Получено: {len(raw_msgs)} сообщений "
+             f"(сервер прочитал внутренне: {stats.get('messagesConsumed', '?')}, "
+             f"байт: {stats.get('bytesConsumed', '?')})")
 
-    if not all_records:
+    records = [r for msg in raw_msgs if (r := parse_message(msg)) is not None]
+    records.sort(key=lambda r: (r.get("kafka_timestamp") or "", r.get("kafka_offset") or 0))
+
+    if not records:
         log.warning("Нет данных для записи")
         sys.exit(0)
 
-    ndjson_path, csv_path = write_outputs(all_records, run_ts)
-    log.info(f"Готово.  NDJSON: {ndjson_path.stat().st_size / 1024 / 1024:.1f} MB")
-    log.info(f"         CSV:    {csv_path.stat().st_size / 1024 / 1024:.1f} MB")
+    ts_first = records[0].get("kafka_timestamp", "?")
+    ts_last  = records[-1].get("kafka_timestamp", "?")
+    log.info(f"Временной диапазон: {ts_first} → {ts_last}")
+
+    ndjson_path, csv_path = write_outputs(records, run_ts)
+    log.info(f"NDJSON: {ndjson_path}  ({ndjson_path.stat().st_size / 1024:.1f} KB)")
+    log.info(f"CSV:    {csv_path}  ({csv_path.stat().st_size / 1024:.1f} KB)")
+    log.info("")
+    log.warning("ВНИМАНИЕ: Kafka UI v1.0 ограничивает выгрузку до 500 сообщений.")
+    log.warning("Для полного дампа 24ч нужен прямой доступ к брокерам (kafka-python).")
 
 
 if __name__ == "__main__":
