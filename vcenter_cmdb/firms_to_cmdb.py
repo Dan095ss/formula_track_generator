@@ -144,33 +144,43 @@ def fetch_firms(**context):
 
 
 def trigger_cmdb_loader(**context):
-    """Запускает cmdb_ref_uploader с передачей данных как Python-объекта"""
+    """Запускает cmdb_ref_uploader и cmdb_universal_uploader_v2."""
     ti = context["ti"]
-
-    # Тянем данные как Python-объект
     records = ti.xcom_pull(task_ids='fetch_firms', key='FIRMS')
 
     if not records:
-        raise ValueError("Нет данных для передачи в cmdb_ref_uploader")
+        raise ValueError("Нет данных для передачи в uploaders")
 
-    logger.info(f"Запуск cmdb_ref_uploader с {len(records)} записями")
+    logger.info(f"Записей подготовлено: {len(records)}")
+    ts = timezone.utcnow().strftime('%Y%m%dT%H%M%S')
 
-    # Формируем conf с Python-объектом (не сериализуем в JSON)
-    conf = {
+    # ── 1. cmdb_ref_uploader (справочник) ────────────────────────────────────
+    ref_conf = {
         "ref_type_name": REF_TYPE_NAME,
         "system": "1c_greenplum",
-        "data": records,  # ← Python list[dict], кириллица сохранится
+        "data": records,
     }
-
-    # Запускаем целевой DAG через trigger_dag (как в glpi_hosts_scan)
-    dag_run = trigger_dag(
+    ref_run = trigger_dag(
         dag_id='cmdb_ref_uploader',
-        run_id=f"triggered__firms_{timezone.utcnow().strftime('%Y%m%dT%H%M%S')}",
-        conf=conf,
+        run_id=f"triggered__firms_ref_{ts}",
+        conf=ref_conf,
         replace_microseconds=False,
     )
+    logger.info(f"Запущен cmdb_ref_uploader: run_id={ref_run.run_id}")
 
-    logger.info(f"Запущен cmdb_ref_uploader: run_id={dag_run.run_id}")
+    # ── 2. cmdb_universal_uploader_v2 (КЕ) ───────────────────────────────────
+    ke_conf = {
+        "ke_type": REF_TYPE_NAME,
+        "system": "1c_greenplum",
+        "data": records,
+    }
+    ke_run = trigger_dag(
+        dag_id='cmdb_universal_uploader_v2',
+        run_id=f"triggered__firms_ke_{ts}",
+        conf=ke_conf,
+        replace_microseconds=False,
+    )
+    logger.info(f"Запущен cmdb_universal_uploader_v2: run_id={ke_run.run_id}")
 
 
 default_args = {
