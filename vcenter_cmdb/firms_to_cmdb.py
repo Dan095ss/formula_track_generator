@@ -62,14 +62,14 @@ def _s(val) -> str:
 
 def clean_name(val: str) -> str:
     """Чистит название фирмы/группы:
-    - снимает экранирование \" → "
-    - убирает всё в круглых скобках (включая сами скобки)
+    - снимает экранирование: любое кол-во \\ перед " или ' → просто кавычка
+    - убирает ведущие я/яя (служебный префикс 1С)
     - схлопывает лишние пробелы
     """
     if not val:
         return val
-    val = val.replace('\\"', '"')                  # \" → "
-    val = re.sub(r'^я+', '', val)                  # ведущие я/яя (служебный префикс 1С)
+    val = re.sub(r'\\+(["\'])', r'\1', val)        # \\" \\\" → "
+    val = re.sub(r'^[яЯ]+\s*', '', val)            # ведущие я/яя/Я + пробел после
     val = re.sub(r'\s{2,}', ' ', val)              # двойные пробелы → один
     return val.strip()
 
@@ -114,7 +114,6 @@ def fetch_firms(**context):
                 "ter_lvl_3": _s(rec["ter_lvl_3"]),
                 "_groups": [],
                 "_emails": [],
-                "name_for_link": name,
             }
         if rec.get("email_group_name"):
             firms[fid]["_groups"].append(_s(rec["email_group_name"]))
@@ -132,7 +131,7 @@ def fetch_firms(**context):
             "ter_lvl_3": f["ter_lvl_3"],
             "email_group_names": "; ".join(f["_groups"]),
             "emails": "; ".join(f["_emails"]),
-            "name_for_link": f["name_for_link"]
+            "name_for_link": "; ".join(f["_groups"]),
         }
         for f in firms.values()
     ]
