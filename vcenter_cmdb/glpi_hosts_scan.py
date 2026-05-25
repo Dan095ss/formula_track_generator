@@ -215,47 +215,52 @@ def make_ad_group_lookup():
                     cn_match = re.match(r"CN=([^,]+)", first_dn, re.IGNORECASE)
                     group = cn_match.group(1) if cn_match else first_dn
                     cache[key] = group
-                    logging.debug(f"AD: '{username}' → group='{group}'")
+                    logging.info(f"AD: '{username}' → group='{group}'")
                     return group
+                logging.debug(f"AD: '{username}' найден, но memberOf пуст")
+            else:
+                logging.debug(f"AD: '{username}' не найден в каталоге")
         except Exception as e:
-            logging.debug(f"AD lookup для '{username}': {e}")
+            logging.warning(f"AD lookup для '{username}' завершился с ошибкой: {e}")
         cache[key] = ""
         return ""
 
     return lookup
 
 
-def resolve_owner(hostname: str, group: str, user: str, contact: str, lebowski_lookup, ad_lookup) -> str:
-    """Fallback-цепочка для owner: Lebowski → GLPI group → AD(user) → user → contact."""
+def resolve_owner(hostname: str, group: str, user: str, contact: str, lebowski_lookup, ad_lookup) -> tuple[str, str]:
+    """Fallback-цепочка для owner: Lebowski → GLPI group → AD(user) → user → contact.
+    Возвращает (значение, источник)."""
     if hostname:
         team = lebowski_lookup(get_short_hostname(hostname))
         if team:
-            return team
+            return team, "lebowski"
     if group and group != "N/A":
-        return group
+        return group, "glpi_group"
     if user and user != "N/A":
         ad_group = ad_lookup(user)
         if ad_group:
-            return ad_group
-        return user
+            return ad_group, "ad"
+        return user, "user"
     if contact and contact.strip() and contact.strip() != "N/A":
         ad_group = ad_lookup(contact.strip())
         if ad_group:
-            return ad_group
-        return contact.strip()
-    return "N/A"
+            return ad_group, "ad_contact"
+        return contact.strip(), "contact"
+    return "N/A", "na"
 
 
-def resolve_admin(group: str, user: str, ad_lookup) -> str:
-    """Fallback-цепочка для admin: GLPI group → AD(user) → user."""
+def resolve_admin(group: str, user: str, ad_lookup) -> tuple[str, str]:
+    """Fallback-цепочка для admin: GLPI group → AD(user) → user.
+    Возвращает (значение, источник)."""
     if group and group != "N/A":
-        return group
+        return group, "glpi_group"
     if user and user != "N/A":
         ad_group = ad_lookup(user)
         if ad_group:
-            return ad_group
-        return user
-    return ""
+            return ad_group, "ad"
+        return user, "user"
+    return "", "na"
 
 
 def normalize_for_conn(os_name, os_version):
@@ -341,6 +346,8 @@ def collect_glpi_data(**context):
     ti = context["ti"]
     all_data = []
     esxi_hostnames = []
+    owner_sources: dict[str, int] = {}
+    admin_sources: dict[str, int] = {}
 
     lebowski_server_index = fetch_lebowski_server_index()
     lebowski_lookup = make_lebowski_team_lookup(lebowski_server_index)
@@ -465,7 +472,7 @@ def collect_glpi_data(**context):
 
                     role, environment = extract_role_env_from_comments_or_hostname(comments, full_hostname)
 
-                    owner = resolve_owner(
+                    owner, owner_src = resolve_owner(
                         full_hostname,
                         item.get("owner_group") or "",
                         item.get("owner_user") or "",
@@ -473,11 +480,13 @@ def collect_glpi_data(**context):
                         lebowski_lookup,
                         ad_lookup,
                     )
-                    admin = resolve_admin(
+                    admin, admin_src = resolve_admin(
                         item.get("admin_group") or "",
                         item.get("admin_user") or "",
                         ad_lookup,
                     )
+                    owner_sources[owner_src] = owner_sources.get(owner_src, 0) + 1
+                    admin_sources[admin_src] = admin_sources.get(admin_src, 0) + 1
 
                     clean_item = {
                         "hostname": full_hostname,
@@ -539,6 +548,8 @@ def collect_glpi_data(**context):
         logging.info("ESXi-хостов для обогащения не обнаружено")
 
     logging.info(f"Всего собрано {len(all_data)} хостов (физические + ESXi)")
+    logging.info(f"Owner sources: { {k: owner_sources[k] for k in sorted(owner_sources)} }")
+    logging.info(f"Admin sources: { {k: admin_sources[k] for k in sorted(admin_sources)} }")
     ti.xcom_push(key="glpi_data", value=all_data)
 
 
