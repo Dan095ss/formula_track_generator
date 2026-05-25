@@ -209,8 +209,8 @@ def make_ad_group_lookup():
             # любая группа должна содержать кириллицу
             if not re.search(r"[А-ЯЁа-яё]", cn):
                 return False
-            # _sh* — шары, отдельным правилом
-            if re.match(r"_sh", cn, re.IGNORECASE):
+            # _sh*, _2fa*, _3* и т.п. — технические префиксы (шары, 2fa, коды)
+            if re.match(r"_sh|_\d", cn, re.IGNORECASE):
                 return False
         return True
 
