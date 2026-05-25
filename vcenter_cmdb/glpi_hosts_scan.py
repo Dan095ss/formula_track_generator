@@ -206,8 +206,9 @@ def make_ad_group_lookup():
         cn_match = re.match(r"cn=([^,]+)", dn, re.IGNORECASE)
         if cn_match:
             cn = cn_match.group(1)
+            if re.match(r"_sh", cn, re.IGNORECASE):
+                return False
             if cn.startswith("_"):
-                # в названии группы должна быть хоть одна кириллическая буква
                 if not re.search(r"[А-ЯЁа-яё]", cn):
                     return False
         return True
