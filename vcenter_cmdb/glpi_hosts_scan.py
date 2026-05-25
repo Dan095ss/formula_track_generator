@@ -199,9 +199,9 @@ def make_ad_group_lookup():
         """Бизнес-группы — нумерованные папки (1., 2., ...).
         Пропускаем: любой OU начинается с '_', CN начинается с '_', Domain Users."""
         dn_lower = dn.lower()
-        # CN начинается с '_' → техническая (_shXXX, _dns.loc и т.п.)
+        # CN начинается с '_sh' → шары, технические (_shXXX)
         cn_match = re.match(r"cn=([^,]+)", dn_lower)
-        if cn_match and cn_match.group(1).startswith("_"):
+        if cn_match and cn_match.group(1).startswith("_sh"):
             return False
         # любой OU в пути начинается с '_' → техническая папка
         if re.search(r"(?:^|,)ou=_", dn_lower):
