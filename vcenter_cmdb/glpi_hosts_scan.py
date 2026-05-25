@@ -236,8 +236,9 @@ def make_ad_group_lookup():
             entry = ldap_conn.entries[0]
 
             # 1. department — прямой атрибут пользователя
-            department = str(entry.department) if entry.department else ""
-            if department and department != "[]":
+            dept_raw = entry.department.value if entry.department else None
+            department = str(dept_raw).strip() if dept_raw else ""
+            if department:
                 cache[key] = department
                 logging.info(f"AD: '{username}' → department='{department}'")
                 return department
