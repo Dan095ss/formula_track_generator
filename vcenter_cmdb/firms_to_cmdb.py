@@ -69,7 +69,7 @@ def clean_name(val: str) -> str:
     if not val:
         return val
     before = val
-    val = re.sub(r'\\+(["\'])', r'\1', val)        # \\" \\\" → "
+    val = val.replace('\\', '')                    # убираем все backslash
     val = re.sub(r'^[яЯ]+\s*', '', val)            # ведущие я/яя/Я + пробел после
     val = re.sub(r'\s{2,}', ' ', val)              # двойные пробелы → один
     val = val.strip()
