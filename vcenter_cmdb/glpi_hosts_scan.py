@@ -10,6 +10,9 @@ import pymysql
 from datetime import datetime
 import logging
 import ssl
+import requests
+from requests.auth import HTTPBasicAuth
+from airflow.models import Connection
 from pyVim.connect import SmartConnect, Disconnect
 from pyVmomi import vim
 from ldap3 import Server, Connection as LdapConnection, ALL, SUBTREE
@@ -20,6 +23,8 @@ default_args = {
 }
 
 GLPI_INSTANCES = ["GLPI", "ADM_GLPI", "ADM_RZN_GLPI"]
+LEBOWSKI_BASE_URL = "https://lebowski.dns-shop.ru/services/hs/api"
+LEBOWSKI_CONN_ID = "lebowski_api"
 VCENTER_URL = Variable.get("VCENTER_URL")
 VCENTER_USERNAME = Variable.get("VCENTER_USERNAME")
 VCENTER_PASSWORD = Variable.get("VCENTER_PASSWORD")
@@ -90,6 +95,82 @@ def extract_role_env_from_comments_or_hostname(comments, hostname):
 
 
 
+def get_lebowski_session():
+    session = requests.Session()
+    try:
+        conn = Connection.get_connection_from_secrets(LEBOWSKI_CONN_ID)
+        session.auth = HTTPBasicAuth(conn.login, conn.password)
+    except Exception:
+        login = Variable.get("LEBOWSKI_LOGIN", default_var=None)
+        password = Variable.get("LEBOWSKI_PASSWORD", default_var=None)
+        if login and password:
+            session.auth = HTTPBasicAuth(login, password)
+        else:
+            logging.warning("Lebowski API: не найдены креды")
+    session.headers.update({"Accept": "application/json"})
+    return session
+
+
+def _extract_lebowski_team(detail: dict) -> str:
+    d = detail.get("data", detail) if isinstance(detail, dict) else detail
+    if not isinstance(d, dict):
+        return ""
+    team = d.get("team", {})
+    if isinstance(team, dict):
+        return str(team.get("name", "") or "").strip()
+    return str(team or "").strip()
+
+
+def make_lebowski_team_lookup(server_index: dict):
+    """Возвращает lookup(hostname) -> team_name. Результаты кэшируются."""
+    session = get_lebowski_session()
+    cache: dict = {}
+
+    def lookup(hostname: str) -> str:
+        server_id = server_index.get(hostname.lower())
+        if not server_id:
+            return ""
+        if server_id in cache:
+            return cache[server_id]
+        try:
+            r = session.get(f"{LEBOWSKI_BASE_URL}/server/{server_id}", timeout=10, verify=False)
+            if r.status_code == 200:
+                team = _extract_lebowski_team(r.json())
+                cache[server_id] = team
+                if team:
+                    logging.info(f"Lebowski hit: '{hostname}' → team='{team}'")
+                return team
+        except Exception as e:
+            logging.debug(f"Lebowski /server/{server_id}: {e}")
+        cache[server_id] = ""
+        return ""
+
+    return lookup
+
+
+def fetch_lebowski_server_index() -> dict:
+    """Возвращает {server_name.lower(): server_id} из /servers."""
+    result = {}
+    try:
+        session = get_lebowski_session()
+        r = session.get(f"{LEBOWSKI_BASE_URL}/servers", timeout=30, verify=False)
+        logging.info(f"Lebowski /servers → HTTP {r.status_code}")
+        if r.status_code == 200:
+            data = r.json()
+            if data.get("code") == 0 and isinstance(data.get("data"), list):
+                for srv in data["data"]:
+                    if srv.get("name") and srv.get("id"):
+                        result[srv["name"].lower()] = srv["id"]
+                logging.info(f"Lebowski /servers: {len(result)} серверов в индексе")
+        elif r.status_code == 403:
+            logging.warning("Lebowski /servers: 403 Forbidden")
+        else:
+            logging.warning(f"Lebowski /servers: HTTP {r.status_code}")
+    except Exception as e:
+        logging.warning(f"Lebowski /servers: {e}")
+    return result
+
+
 def make_ad_group_lookup():
     """
     Возвращает функцию lookup(username) -> group_name.
@@ -144,8 +225,12 @@ def make_ad_group_lookup():
     return lookup
 
 
-def resolve_resp(group: str, user: str, contact: str, ad_lookup) -> str:
-    """Единая fallback-цепочка для owner/admin."""
+def resolve_owner(hostname: str, group: str, user: str, contact: str, lebowski_lookup, ad_lookup) -> str:
+    """Fallback-цепочка для owner: Lebowski → GLPI group → AD(user) → user → contact."""
+    if hostname:
+        team = lebowski_lookup(get_short_hostname(hostname))
+        if team:
+            return team
     if group and group != "N/A":
         return group
     if user and user != "N/A":
@@ -159,6 +244,18 @@ def resolve_resp(group: str, user: str, contact: str, ad_lookup) -> str:
             return ad_group
         return contact.strip()
     return "N/A"
+
+
+def resolve_admin(group: str, user: str, ad_lookup) -> str:
+    """Fallback-цепочка для admin: GLPI group → AD(user) → user."""
+    if group and group != "N/A":
+        return group
+    if user and user != "N/A":
+        ad_group = ad_lookup(user)
+        if ad_group:
+            return ad_group
+        return user
+    return ""
 
 
 def normalize_for_conn(os_name, os_version):
@@ -245,6 +342,9 @@ def collect_glpi_data(**context):
     all_data = []
     esxi_hostnames = []
 
+    lebowski_server_index = fetch_lebowski_server_index()
+    lebowski_lookup = make_lebowski_team_lookup(lebowski_server_index)
+    logging.info(f"Lebowski: {len(lebowski_server_index)} серверов в индексе")
     ad_lookup = make_ad_group_lookup()
 
     for glpi_prefix in GLPI_INSTANCES:
@@ -365,16 +465,17 @@ def collect_glpi_data(**context):
 
                     role, environment = extract_role_env_from_comments_or_hostname(comments, full_hostname)
 
-                    owner = resolve_resp(
+                    owner = resolve_owner(
+                        full_hostname,
                         item.get("owner_group") or "",
                         item.get("owner_user") or "",
                         item.get("owner_contact") or "",
+                        lebowski_lookup,
                         ad_lookup,
                     )
-                    admin = resolve_resp(
+                    admin = resolve_admin(
                         item.get("admin_group") or "",
                         item.get("admin_user") or "",
-                        "",
                         ad_lookup,
                     )
 
