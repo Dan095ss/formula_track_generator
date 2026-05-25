@@ -68,10 +68,14 @@ def clean_name(val: str) -> str:
     """
     if not val:
         return val
+    before = val
     val = re.sub(r'\\+(["\'])', r'\1', val)        # \\" \\\" → "
     val = re.sub(r'^[яЯ]+\s*', '', val)            # ведущие я/яя/Я + пробел после
     val = re.sub(r'\s{2,}', ' ', val)              # двойные пробелы → один
-    return val.strip()
+    val = val.strip()
+    if val != before.strip():
+        logger.info(f"clean_name: {repr(before[:80])} → {repr(val[:80])}")
+    return val
 
 
 def fetch_firms(**context):
@@ -103,7 +107,10 @@ def fetch_firms(**context):
         if not fid:
             continue
         if fid not in firms:
-            name = clean_name(_s(rec["name"]))
+            raw_name = _s(rec["name"])
+            if chr(92) in raw_name or raw_name.startswith(('я', 'Я')):
+                logger.info(f"RAW from DB: {repr(raw_name[:100])}")
+            name = clean_name(raw_name)
             firms[fid] = {
                 "id_1c": fid,
                 "name": name,
