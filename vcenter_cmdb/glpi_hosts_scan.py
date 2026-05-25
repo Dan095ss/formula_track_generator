@@ -385,10 +385,20 @@ def collect_glpi_data(**context):
                         c.name AS hostname,
                         ov.name AS os_name,
                         osv.name AS os_version,
-                        NULLIF(TRIM(g_own.name), '')  AS owner_group,
+                        NULLIF(TRIM(
+                            (SELECT g.name FROM glpi_groups_items gi
+                             JOIN glpi_groups g ON gi.groups_id = g.id
+                             WHERE gi.items_id = c.id AND gi.itemtype = 'Computer' AND gi.type = 0
+                             ORDER BY gi.id LIMIT 1)
+                        ), '') AS owner_group,
                         NULLIF(TRIM(u.name), '')       AS owner_user,
                         NULLIF(TRIM(c.contact), '')    AS owner_contact,
-                        NULLIF(TRIM(g_tech.name), '')  AS admin_group,
+                        NULLIF(TRIM(
+                            (SELECT g.name FROM glpi_groups_items gi
+                             JOIN glpi_groups g ON gi.groups_id = g.id
+                             WHERE gi.items_id = c.id AND gi.itemtype = 'Computer' AND gi.type = 1
+                             ORDER BY gi.id LIMIT 1)
+                        ), '') AS admin_group,
                         NULLIF(TRIM(u_tech.name), '')  AS admin_user,
                         COALESCE(a.remote_addr, 'OBAMA') AS ip,
                         COALESCE(c.serial, 'N/A') AS serial,
@@ -433,12 +443,8 @@ def collect_glpi_data(**context):
                         ON io.operatingsystemversions_id = osv.id
                     LEFT JOIN glpi_users AS u
                         ON c.users_id = u.id
-                    LEFT JOIN glpi_groups AS g_own
-                        ON c.groups_id = g_own.id
                     LEFT JOIN glpi_users AS u_tech
                         ON c.users_id_tech = u_tech.id
-                    LEFT JOIN glpi_groups AS g_tech
-                        ON c.groups_id_tech = g_tech.id
                     LEFT JOIN glpi_agents AS a
                         ON c.id = a.items_id AND a.itemtype = 'Computer'
                     LEFT JOIN glpi_computertypes AS ct
