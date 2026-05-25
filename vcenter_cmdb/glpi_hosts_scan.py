@@ -196,18 +196,15 @@ def make_ad_group_lookup():
         return lambda username: ""
 
     def _is_business_group(dn: str) -> bool:
-        """Бизнес-группы — нумерованные папки (1., 2., ...).
-        Пропускаем: любой OU начинается с '_', CN начинается с '_', Domain Users."""
+        """Только группы из пронумерованных папок DNS Users (1., 2., 3. ...).
+        Пропускаем _sh* (шары)."""
         dn_lower = dn.lower()
-        # CN начинается с '_sh' → шары, технические (_shXXX)
+        # должна лежать в пронумерованной папке: OU=1. ..., OU=2. ... и т.д.
+        if not re.search(r"ou=\d+\.", dn_lower):
+            return False
+        # _sh* — шары, не берём
         cn_match = re.match(r"cn=([^,]+)", dn_lower)
         if cn_match and cn_match.group(1).startswith("_sh"):
-            return False
-        # любой OU в пути начинается с '_' → техническая папка
-        if re.search(r"(?:^|,)ou=_", dn_lower):
-            return False
-        # верхнеуровневые группы типа Domain Users (OU=Users без DNS Users)
-        if "ou=users," in dn_lower and "ou=dns users" not in dn_lower:
             return False
         return True
 
