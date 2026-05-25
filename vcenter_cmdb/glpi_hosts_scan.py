@@ -299,6 +299,11 @@ def strip_domain(username: str) -> str:
     return username.split("@")[0].strip() if username else username
 
 
+def strip_leading_underscore(value: str) -> str:
+    """_ Фед. деп. МБТ → Фед. деп. МБТ, _IT-группа → IT-группа"""
+    return value.lstrip("_ ").strip() if value else value
+
+
 def normalize_for_conn(os_name, os_version):
     name_part = re.sub(r'\s+', ' ', (os_name or "").strip().lower())
     version_part = re.sub(r'\s+', ' ', (os_version or "").strip().lower())
@@ -538,9 +543,9 @@ def collect_glpi_data(**context):
                         "shorthost": shorthost,
                         "domain_name": domain,
                         "os_name": os_conn_name,
-                        "owner": owner,
+                        "owner": strip_leading_underscore(owner),
                         "owner_person": owner_person,
-                        "admin": admin if admin != "N/A" else "",
+                        "admin": strip_leading_underscore(admin) if admin != "N/A" else "",
                         "admin_person": admin_person,
                         "source": glpi_prefix,
                         "hardware_type": host_type,
