@@ -206,7 +206,9 @@ def make_ad_group_lookup():
         cn_match = re.match(r"cn=([^,]+)", dn, re.IGNORECASE)
         if cn_match:
             cn = cn_match.group(1)
-            if re.match(r"_sh", cn, re.IGNORECASE):
+            cn_lower = cn.lower()
+            # глобальные/технические группы — не несут смысла как владелец
+            if re.match(r"(all_|_sh|dv\s|pgbouncer)", cn_lower):
                 return False
             if cn.startswith("_"):
                 if not re.search(r"[А-ЯЁа-яё]", cn):
