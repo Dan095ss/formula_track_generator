@@ -9,12 +9,10 @@ from airflow.utils import timezone
 import pymysql
 from datetime import datetime
 import logging
-import requests
-from requests.auth import HTTPBasicAuth
-from airflow.models import Connection
 import ssl
 from pyVim.connect import SmartConnect, Disconnect
 from pyVmomi import vim
+from ldap3 import Server, Connection as LdapConnection, ALL, SUBTREE
 
 default_args = {
     "owner": "Sevryuk.DA@dns-shop.ru",
@@ -22,8 +20,6 @@ default_args = {
 }
 
 GLPI_INSTANCES = ["GLPI", "ADM_GLPI", "ADM_RZN_GLPI"]
-LEBOWSKI_BASE_URL = "https://lebowski.dns-shop.ru/services/hs/api"
-LEBOWSKI_CONN_ID = "lebowski_api"
 VCENTER_URL = Variable.get("VCENTER_URL")
 VCENTER_USERNAME = Variable.get("VCENTER_USERNAME")
 VCENTER_PASSWORD = Variable.get("VCENTER_PASSWORD")
@@ -93,85 +89,76 @@ def extract_role_env_from_comments_or_hostname(comments, hostname):
     return role, environment
 
 
-def get_lebowski_session():
-    session = requests.Session()
-    try:
-        conn = Connection.get_connection_from_secrets(LEBOWSKI_CONN_ID)
-        session.auth = HTTPBasicAuth(conn.login, conn.password)
-    except Exception:
-        login = Variable.get("LEBOWSKI_LOGIN", default_var=None)
-        password = Variable.get("LEBOWSKI_PASSWORD", default_var=None)
-        if login and password:
-            session.auth = HTTPBasicAuth(login, password)
-        else:
-            logging.warning("Lebowski API: не найдены креды")
-    session.headers.update({"Accept": "application/json"})
-    return session
 
-
-def fetch_lebowski_server_index() -> dict:
-    """Возвращает {server_name.lower(): server_id} из /servers."""
-    result = {}
-    try:
-        session = get_lebowski_session()
-        r = session.get(f"{LEBOWSKI_BASE_URL}/servers", timeout=30, verify=False)
-        logging.info(f"Lebowski /servers → HTTP {r.status_code}")
-        if r.status_code == 200:
-            data = r.json()
-            if data.get("code") == 0 and isinstance(data.get("data"), list):
-                for srv in data["data"]:
-                    if srv.get("name") and srv.get("id"):
-                        result[srv["name"].lower()] = srv["id"]
-                logging.info(f"Lebowski /servers: {len(result)} серверов в индексе")
-        elif r.status_code == 403:
-            logging.warning("Lebowski /servers: 403 Forbidden")
-        else:
-            logging.warning(f"Lebowski /servers: HTTP {r.status_code}")
-    except Exception as e:
-        logging.warning(f"Lebowski /servers: {e}")
-    return result
-
-
-def _extract_lebowski_team(detail: dict) -> str:
-    """Извлекает team.name из ответа /server/{id}."""
-    d = detail.get("data", detail) if isinstance(detail, dict) else detail
-    if not isinstance(d, dict):
-        return ""
-    team = d.get("team", {})
-    if isinstance(team, dict):
-        return str(team.get("name", "") or "").strip()
-    return str(team or "").strip()
-
-
-def make_lebowski_team_lookup(server_index: dict):
+def make_ad_group_lookup():
     """
-    Возвращает функцию lookup(hostname) -> team_name.
-    Детали сервера загружаются лениво через /server/{id} и кэшируются.
+    Возвращает функцию lookup(username) -> group_name.
+    Берёт первую группу из memberOf для пользователя (sAMAccountName).
+    Результаты кэшируются на время DAG run.
     """
-    session = get_lebowski_session()
     cache: dict = {}
+    try:
+        ad_server = Variable.get("AD_SERVER")
+        ad_user = Variable.get("AD_USER")
+        ad_password = Variable.get("AD_PASSWORD")
+        ad_base_dn = Variable.get("AD_BASE_DN")
+    except Exception as e:
+        logging.warning(f"AD lookup: не удалось получить переменные: {e}")
+        return lambda username: ""
 
-    def lookup(hostname: str) -> str:
-        server_id = server_index.get(hostname.lower())
-        if not server_id:
+    try:
+        server = Server(ad_server, get_info=ALL)
+        ldap_conn = LdapConnection(server, ad_user, ad_password, auto_bind=True)
+        logging.info(f"AD lookup: подключение к {ad_server} успешно")
+    except Exception as e:
+        logging.warning(f"AD lookup: не удалось подключиться к {ad_server}: {e}")
+        return lambda username: ""
+
+    def lookup(username: str) -> str:
+        if not username or username == "N/A":
             return ""
-        if server_id in cache:
-            return cache[server_id]
+        key = username.lower()
+        if key in cache:
+            return cache[key]
         try:
-            r = session.get(f"{LEBOWSKI_BASE_URL}/server/{server_id}", timeout=10, verify=False)
-            logging.debug(f"Lebowski /server/{server_id} ({hostname}) → HTTP {r.status_code}")
-            if r.status_code == 200:
-                team = _extract_lebowski_team(r.json())
-                cache[server_id] = team
-                if team:
-                    logging.info(f"Lebowski hit: '{hostname}' → team='{team}'")
-                return team
+            ldap_conn.search(
+                search_base=ad_base_dn,
+                search_filter=f"(sAMAccountName={username})",
+                search_scope=SUBTREE,
+                attributes=["memberOf"],
+            )
+            if ldap_conn.entries:
+                member_of = ldap_conn.entries[0].memberOf.values
+                if member_of:
+                    first_dn = member_of[0]
+                    cn_match = re.match(r"CN=([^,]+)", first_dn, re.IGNORECASE)
+                    group = cn_match.group(1) if cn_match else first_dn
+                    cache[key] = group
+                    logging.debug(f"AD: '{username}' → group='{group}'")
+                    return group
         except Exception as e:
-            logging.debug(f"Lebowski /server/{server_id}: {e}")
-        cache[server_id] = ""
+            logging.debug(f"AD lookup для '{username}': {e}")
+        cache[key] = ""
         return ""
 
     return lookup
+
+
+def resolve_resp(group: str, user: str, contact: str, ad_lookup) -> str:
+    """Единая fallback-цепочка для owner/admin."""
+    if group and group != "N/A":
+        return group
+    if user and user != "N/A":
+        ad_group = ad_lookup(user)
+        if ad_group:
+            return ad_group
+        return user
+    if contact and contact.strip() and contact.strip() != "N/A":
+        ad_group = ad_lookup(contact.strip())
+        if ad_group:
+            return ad_group
+        return contact.strip()
+    return "N/A"
 
 
 def normalize_for_conn(os_name, os_version):
@@ -257,9 +244,8 @@ def collect_glpi_data(**context):
     ti = context["ti"]
     all_data = []
     esxi_hostnames = []
-    lebowski_server_index = fetch_lebowski_server_index()
-    lebowski_lookup = make_lebowski_team_lookup(lebowski_server_index)
-    logging.info(f"Lebowski: {len(lebowski_server_index)} серверов в индексе")
+
+    ad_lookup = make_ad_group_lookup()
 
     for glpi_prefix in GLPI_INSTANCES:
         logging.info(f"Сбор данных из инстанса: {glpi_prefix}")
@@ -283,11 +269,11 @@ def collect_glpi_data(**context):
                         c.name AS hostname,
                         ov.name AS os_name,
                         osv.name AS os_version,
-                        COALESCE(
-                            NULLIF(TRIM(u.name), ''),
-                            NULLIF(TRIM(c.contact), ''),
-                            'N/A'
-                        ) AS owner,
+                        NULLIF(TRIM(g_own.name), '')  AS owner_group,
+                        NULLIF(TRIM(u.name), '')       AS owner_user,
+                        NULLIF(TRIM(c.contact), '')    AS owner_contact,
+                        NULLIF(TRIM(g_tech.name), '')  AS admin_group,
+                        NULLIF(TRIM(u_tech.name), '')  AS admin_user,
                         COALESCE(a.remote_addr, 'OBAMA') AS ip,
                         COALESCE(c.serial, 'N/A') AS serial,
                         COALESCE(dc.name, 'N/A') AS srv_name,
@@ -301,7 +287,26 @@ def collect_glpi_data(**context):
                         ) AS srv_location,
                         c.date_mod AS last_update,
                         ct.name AS computer_type,
-                        c.comment AS comments
+                        c.comment AS comments,
+                        COALESCE(
+                            (SELECT SUM(COALESCE(idp.nbcores, dp.nbcores_default, 0))
+                             FROM glpi_items_deviceprocessors AS idp
+                             JOIN glpi_deviceprocessors AS dp ON idp.deviceprocessors_id = dp.id
+                             WHERE idp.items_id = c.id AND idp.itemtype = 'Computer'),
+                            0
+                        ) AS cpu_cores,
+                        COALESCE(
+                            (SELECT ROUND(SUM(idm.size) / 1024)
+                             FROM glpi_items_devicememories AS idm
+                             WHERE idm.items_id = c.id AND idm.itemtype = 'Computer'),
+                            0
+                        ) AS ram_gb,
+                        COALESCE(
+                            (SELECT ROUND(SUM(idhd.capacity) / 1024)
+                             FROM glpi_items_deviceharddrives AS idhd
+                             WHERE idhd.items_id = c.id AND idhd.itemtype = 'Computer'),
+                            0
+                        ) AS disk_gb
                     FROM glpi_computers AS c
                     LEFT JOIN glpi_datacenters AS dc ON c.locations_id = dc.id
                     LEFT JOIN glpi_items_operatingsystems AS io
@@ -312,6 +317,12 @@ def collect_glpi_data(**context):
                         ON io.operatingsystemversions_id = osv.id
                     LEFT JOIN glpi_users AS u
                         ON c.users_id = u.id
+                    LEFT JOIN glpi_groups AS g_own
+                        ON c.groups_id = g_own.id
+                    LEFT JOIN glpi_users AS u_tech
+                        ON c.users_id_tech = u_tech.id
+                    LEFT JOIN glpi_groups AS g_tech
+                        ON c.groups_id_tech = g_tech.id
                     LEFT JOIN glpi_agents AS a
                         ON c.id = a.items_id AND a.itemtype = 'Computer'
                     LEFT JOIN glpi_computertypes AS ct
@@ -354,13 +365,26 @@ def collect_glpi_data(**context):
 
                     role, environment = extract_role_env_from_comments_or_hostname(comments, full_hostname)
 
+                    owner = resolve_resp(
+                        item.get("owner_group") or "",
+                        item.get("owner_user") or "",
+                        item.get("owner_contact") or "",
+                        ad_lookup,
+                    )
+                    admin = resolve_resp(
+                        item.get("admin_group") or "",
+                        item.get("admin_user") or "",
+                        "",
+                        ad_lookup,
+                    )
+
                     clean_item = {
                         "hostname": full_hostname,
                         "shorthost": shorthost,
                         "domain_name": domain,
                         "os_name": os_conn_name,
-                        "owner": item["owner"],
-                        "admin": "",
+                        "owner": owner,
+                        "admin": admin if admin != "N/A" else "",
                         "source": glpi_prefix,
                         "hardware_type": host_type,
                         #"srv_name": item["srv_name"],
@@ -377,17 +401,13 @@ def collect_glpi_data(**context):
                             if isinstance(item["last_update"], datetime)
                             else "N/A"
                         ),
-                        "lebowski_filled": "",
+                        "cpu": str(item.get("cpu_cores") or 0),
+                        "ram": str(item.get("ram_gb") or 0),
+                        "disk": str(item.get("disk_gb") or 0),
                     }
 
                     if host_type == "esxi" and full_hostname:
                         esxi_hostnames.append(full_hostname)
-
-                    if clean_item["owner"] == "N/A" and shorthost:
-                        team = lebowski_lookup(shorthost)
-                        if team:
-                            clean_item["owner"] = team
-                            clean_item["lebowski_filled"] = "owner"
 
                     all_data.append(clean_item)
 
@@ -417,8 +437,6 @@ def collect_glpi_data(**context):
     else:
         logging.info("ESXi-хостов для обогащения не обнаружено")
 
-    leb_filled = sum(1 for item in all_data if item.get("lebowski_filled") == "owner")
-    logging.info(f"Lebowski: owner заполнен для {leb_filled}/{len(all_data)} хостов")
     logging.info(f"Всего собрано {len(all_data)} хостов (физические + ESXi)")
     ti.xcom_push(key="glpi_data", value=all_data)
 
