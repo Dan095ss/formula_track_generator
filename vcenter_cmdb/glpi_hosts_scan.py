@@ -525,13 +525,18 @@ def collect_glpi_data(**context):
                     owner_sources[owner_src] = owner_sources.get(owner_src, 0) + 1
                     admin_sources[admin_src] = admin_sources.get(admin_src, 0) + 1
 
+                    owner_person = strip_domain(item.get("owner_user") or "") or strip_domain(item.get("owner_contact") or "")
+                    admin_person = strip_domain(item.get("admin_user") or "")
+
                     clean_item = {
                         "hostname": full_hostname,
                         "shorthost": shorthost,
                         "domain_name": domain,
                         "os_name": os_conn_name,
                         "owner": owner,
+                        "owner_person": owner_person,
                         "admin": admin if admin != "N/A" else "",
+                        "admin_person": admin_person,
                         "source": glpi_prefix,
                         "hardware_type": host_type,
                         #"srv_name": item["srv_name"],
