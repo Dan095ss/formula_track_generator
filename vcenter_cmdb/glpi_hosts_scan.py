@@ -226,31 +226,41 @@ def make_ad_group_lookup():
                 search_base=ad_base_dn,
                 search_filter=f"(sAMAccountName={username})",
                 search_scope=SUBTREE,
-                attributes=["memberOf"],
+                attributes=["department", "memberOf"],
             )
-            if ldap_conn.entries:
-                member_of = ldap_conn.entries[0].memberOf.values
-                business = [dn for dn in member_of if _is_business_group(dn)]
-                if business:
-                    business.sort(key=lambda d: (
-                        0 if re.match(r"cn=_", d, re.IGNORECASE) else 1
-                    ))
-                    first_dn = business[0]
-                    is_preferred = bool(re.match(r"cn=_", first_dn, re.IGNORECASE))
-                    cn_match = re.match(r"CN=([^,]+)", first_dn, re.IGNORECASE)
-                    group = cn_match.group(1) if cn_match else first_dn
-                    cache[key] = group
-                    if is_preferred:
-                        logging.info(f"AD: '{username}' → group='{group}'")
-                    else:
-                        logging.info(f"AD: '{username}' → group='{group}' [fallback, нет _-группы]")
-                    return group
-                if member_of:
-                    logging.debug(f"AD: '{username}' — все {len(member_of)} групп отфильтрованы (должности/tech)")
-                else:
-                    logging.debug(f"AD: '{username}' найден, но memberOf пуст")
-            else:
+            if not ldap_conn.entries:
                 logging.debug(f"AD: '{username}' не найден в каталоге")
+                cache[key] = ""
+                return ""
+
+            entry = ldap_conn.entries[0]
+
+            # 1. department — прямой атрибут пользователя
+            department = str(entry.department) if entry.department else ""
+            if department and department != "[]":
+                cache[key] = department
+                logging.info(f"AD: '{username}' → department='{department}'")
+                return department
+
+            # 2. fallback: memberOf → бизнес-группа
+            member_of = entry.memberOf.values if entry.memberOf else []
+            business = [dn for dn in member_of if _is_business_group(dn)]
+            if business:
+                business.sort(key=lambda d: (
+                    0 if re.match(r"cn=_", d, re.IGNORECASE) else 1
+                ))
+                first_dn = business[0]
+                is_preferred = bool(re.match(r"cn=_", first_dn, re.IGNORECASE))
+                cn_match = re.match(r"CN=([^,]+)", first_dn, re.IGNORECASE)
+                group = cn_match.group(1) if cn_match else first_dn
+                cache[key] = group
+                if is_preferred:
+                    logging.info(f"AD: '{username}' → group='{group}' [dept пуст]")
+                else:
+                    logging.info(f"AD: '{username}' → group='{group}' [dept пуст, fallback]")
+                return group
+
+            logging.debug(f"AD: '{username}' — department пуст, групп не найдено")
         except Exception as e:
             logging.warning(f"AD lookup для '{username}' завершился с ошибкой: {e}")
         cache[key] = ""
