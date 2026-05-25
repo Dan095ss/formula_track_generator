@@ -206,13 +206,12 @@ def make_ad_group_lookup():
         cn_match = re.match(r"cn=([^,]+)", dn, re.IGNORECASE)
         if cn_match:
             cn = cn_match.group(1)
-            cn_lower = cn.lower()
-            # глобальные/технические группы — не несут смысла как владелец
-            if re.match(r"(all_|_sh|dv\s|pgbouncer)", cn_lower):
+            # любая группа должна содержать кириллицу
+            if not re.search(r"[А-ЯЁа-яё]", cn):
                 return False
-            if cn.startswith("_"):
-                if not re.search(r"[А-ЯЁа-яё]", cn):
-                    return False
+            # _sh* — шары, отдельным правилом
+            if re.match(r"_sh", cn, re.IGNORECASE):
+                return False
         return True
 
     def lookup(username: str) -> str:
