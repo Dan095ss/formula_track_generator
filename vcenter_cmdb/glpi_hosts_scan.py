@@ -198,6 +198,7 @@ def make_ad_group_lookup():
     def lookup(username: str) -> str:
         if not username or username == "N/A":
             return ""
+        username = strip_domain(username)
         key = username.lower()
         if key in cache:
             return cache[key]
@@ -238,15 +239,17 @@ def resolve_owner(hostname: str, group: str, user: str, contact: str, lebowski_l
     if group and group != "N/A":
         return group, "glpi_group"
     if user and user != "N/A":
+        user = strip_domain(user)
         ad_group = ad_lookup(user)
         if ad_group:
             return ad_group, "ad"
         return user, "user"
     if contact and contact.strip() and contact.strip() != "N/A":
-        ad_group = ad_lookup(contact.strip())
+        contact = strip_domain(contact.strip())
+        ad_group = ad_lookup(contact)
         if ad_group:
             return ad_group, "ad_contact"
-        return contact.strip(), "contact"
+        return contact, "contact"
     return "N/A", "na"
 
 
@@ -256,11 +259,17 @@ def resolve_admin(group: str, user: str, ad_lookup) -> tuple[str, str]:
     if group and group != "N/A":
         return group, "glpi_group"
     if user and user != "N/A":
+        user = strip_domain(user)
         ad_group = ad_lookup(user)
         if ad_group:
             return ad_group, "ad"
         return user, "user"
     return "", "na"
+
+
+def strip_domain(username: str) -> str:
+    """Sevryuk.DA@PARTNER → Sevryuk.DA"""
+    return username.split("@")[0].strip() if username else username
 
 
 def normalize_for_conn(os_name, os_version):
