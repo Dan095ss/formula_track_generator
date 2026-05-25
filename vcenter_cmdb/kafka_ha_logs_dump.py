@@ -19,9 +19,11 @@ from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
 import requests
+import urllib3
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # ── Настройки ────────────────────────────────────────────────────────────────
-KAFKA_UI_BASE = "http://kafka-ui.sl-k8s.dns-shop.ru"
+KAFKA_UI_BASE = "https://kafka-ui.sl-k8s.dns-shop.ru"
 CLUSTER       = "local"
 TOPIC         = "ha_logs"
 BATCH_SIZE    = 500          # сообщений за один запрос (макс. ~500 у kafka-ui)
@@ -62,7 +64,7 @@ def make_session() -> requests.Session:
 def api_get(session: requests.Session, url: str, params: dict) -> dict:
     for attempt in range(1, RETRY_ATTEMPTS + 1):
         try:
-            r = session.get(url, params=params, timeout=REQUEST_TIMEOUT)
+            r = session.get(url, params=params, timeout=REQUEST_TIMEOUT, verify=False)
             if r.status_code == 200:
                 return r.json()
             log.warning(f"HTTP {r.status_code} — {url} (попытка {attempt})")
