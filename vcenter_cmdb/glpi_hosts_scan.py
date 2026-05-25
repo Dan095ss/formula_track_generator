@@ -197,15 +197,19 @@ def make_ad_group_lookup():
 
     def _is_business_group(dn: str) -> bool:
         """Только группы из пронумерованных папок DNS Users (1., 2., 3. ...).
-        Пропускаем _sh* (шары)."""
+        Если CN начинается с '_', после '_' (и пробела) должна идти кириллица."""
         dn_lower = dn.lower()
         # должна лежать в пронумерованной папке: OU=1. ..., OU=2. ... и т.д.
         if not re.search(r"ou=\d+\.", dn_lower):
             return False
-        # _sh* — шары, не берём
-        cn_match = re.match(r"cn=([^,]+)", dn_lower)
-        if cn_match and cn_match.group(1).startswith("_sh"):
-            return False
+        # проверяем CN из оригинального DN (не lower — для кириллицы)
+        cn_match = re.match(r"cn=([^,]+)", dn, re.IGNORECASE)
+        if cn_match:
+            cn = cn_match.group(1)
+            if cn.startswith("_"):
+                # в названии группы должна быть хоть одна кириллическая буква
+                if not re.search(r"[А-ЯЁа-яё]", cn):
+                    return False
         return True
 
     def lookup(username: str) -> str:
