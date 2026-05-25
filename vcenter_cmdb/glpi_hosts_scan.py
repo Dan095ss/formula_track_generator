@@ -196,15 +196,20 @@ def make_ad_group_lookup():
         return lambda username: ""
 
     def _is_business_group(dn: str) -> bool:
-        """Пропускаем должности, технические и системные OU."""
+        """Бизнес-группы — нумерованные папки (1., 2., ...).
+        Пропускаем: любой OU начинается с '_', CN начинается с '_', Domain Users."""
         dn_lower = dn.lower()
-        skip_patterns = (
-            "должности",        # OU=Должности — должности сотрудников
-            "_dns public",      # технические public-группы
-            "_system",          # системные учётки и группы
-            "ou=users,",        # верхнеуровневые системные (Domain Users и т.п.)
-        )
-        return not any(p in dn_lower for p in skip_patterns)
+        # CN начинается с '_' → техническая (_shXXX, _dns.loc и т.п.)
+        cn_match = re.match(r"cn=([^,]+)", dn_lower)
+        if cn_match and cn_match.group(1).startswith("_"):
+            return False
+        # любой OU в пути начинается с '_' → техническая папка
+        if re.search(r"(?:^|,)ou=_", dn_lower):
+            return False
+        # верхнеуровневые группы типа Domain Users (OU=Users без DNS Users)
+        if "ou=users," in dn_lower and "ou=dns users" not in dn_lower:
+            return False
+        return True
 
     def lookup(username: str) -> str:
         if not username or username == "N/A":
