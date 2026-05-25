@@ -195,6 +195,17 @@ def make_ad_group_lookup():
         logging.warning(f"AD lookup: не удалось подключиться к {ad_server}: {e}")
         return lambda username: ""
 
+    def _is_business_group(dn: str) -> bool:
+        """Пропускаем должности, технические и системные OU."""
+        dn_lower = dn.lower()
+        skip_patterns = (
+            "должности",        # OU=Должности — должности сотрудников
+            "_dns public",      # технические public-группы
+            "_system",          # системные учётки и группы
+            "ou=users,",        # верхнеуровневые системные (Domain Users и т.п.)
+        )
+        return not any(p in dn_lower for p in skip_patterns)
+
     def lookup(username: str) -> str:
         if not username or username == "N/A":
             return ""
@@ -211,14 +222,18 @@ def make_ad_group_lookup():
             )
             if ldap_conn.entries:
                 member_of = ldap_conn.entries[0].memberOf.values
-                if member_of:
-                    first_dn = member_of[0]
+                business = [dn for dn in member_of if _is_business_group(dn)]
+                if business:
+                    first_dn = business[0]
                     cn_match = re.match(r"CN=([^,]+)", first_dn, re.IGNORECASE)
                     group = cn_match.group(1) if cn_match else first_dn
                     cache[key] = group
                     logging.info(f"AD: '{username}' → group='{group}'")
                     return group
-                logging.debug(f"AD: '{username}' найден, но memberOf пуст")
+                if member_of:
+                    logging.debug(f"AD: '{username}' — все {len(member_of)} групп отфильтрованы (должности/tech)")
+                else:
+                    logging.debug(f"AD: '{username}' найден, но memberOf пуст")
             else:
                 logging.debug(f"AD: '{username}' не найден в каталоге")
         except Exception as e:
