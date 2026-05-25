@@ -70,7 +70,6 @@ def clean_name(val: str) -> str:
         return val
     val = val.replace('\\"', '"')                  # \" → "
     val = re.sub(r'^я+', '', val)                  # ведущие я/яя (служебный префикс 1С)
-    val = re.sub(r'\([^)]*\)|\([^)]*$', '', val)  # убираем (...) и обрезанное (ЗА...
     val = re.sub(r'\s{2,}', ' ', val)              # двойные пробелы → один
     return val.strip()
 
