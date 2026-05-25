@@ -270,8 +270,28 @@ def make_ad_group_lookup():
     return lookup
 
 
+def split_users(raw: str) -> list[str]:
+    """'Danilyuk.AA@PARTNER/Zlyigostev.EI@PARTNER/...' → ['Danilyuk.AA', 'Zlyigostev.EI', ...]"""
+    return [strip_domain(u.strip()) for u in raw.split("/") if u.strip()]
+
+
+def lookup_multi(usernames: list[str], ad_lookup) -> tuple[str, str]:
+    """AD-поиск по нескольким пользователям.
+    Возвращает (уникальные_группы_через_/, пользователи_через_/).
+    """
+    groups, persons = [], []
+    for uname in usernames:
+        if uname:
+            persons.append(uname)
+            g = ad_lookup(uname)
+            if g and g not in groups:
+                groups.append(g)
+    return " / ".join(groups), " / ".join(persons)
+
+
 def resolve_owner(hostname: str, group: str, user: str, contact: str, lebowski_lookup, ad_lookup) -> tuple[str, str]:
     """Fallback-цепочка для owner: Lebowski → GLPI group → AD(user) → user → contact.
+    contact может содержать несколько аккаунтов через '/'.
     Возвращает (значение, источник)."""
     if hostname:
         team = lebowski_lookup(get_short_hostname(hostname))
@@ -286,12 +306,26 @@ def resolve_owner(hostname: str, group: str, user: str, contact: str, lebowski_l
             return ad_group, "ad"
         return user, "user"
     if contact and contact.strip() and contact.strip() != "N/A":
-        contact = strip_domain(contact.strip())
-        ad_group = ad_lookup(contact)
-        if ad_group:
-            return ad_group, "ad_contact"
-        return contact, "contact"
+        usernames = split_users(contact)
+        if usernames:
+            groups_str, _ = lookup_multi(usernames, ad_lookup)
+            if groups_str:
+                return groups_str, "ad_contact"
+            # группы не найдены — возвращаем всех пользователей как есть
+            return " / ".join(usernames), "contact"
     return "N/A", "na"
+
+
+def resolve_owner_person(user: str, contact: str) -> str:
+    """Собирает owner_person: один юзер или несколько через '/'."""
+    persons = []
+    if user and user != "N/A":
+        persons.append(strip_domain(user))
+    if contact and contact.strip() and contact.strip() != "N/A":
+        for u in split_users(contact):
+            if u and u not in persons:
+                persons.append(u)
+    return " / ".join(persons)
 
 
 def resolve_admin(group: str, user: str, ad_lookup) -> tuple[str, str]:
@@ -549,7 +583,10 @@ def collect_glpi_data(**context):
                     owner_sources[owner_src] = owner_sources.get(owner_src, 0) + 1
                     admin_sources[admin_src] = admin_sources.get(admin_src, 0) + 1
 
-                    owner_person = strip_domain(item.get("owner_user") or "") or strip_domain(item.get("owner_contact") or "")
+                    owner_person = resolve_owner_person(
+                        item.get("owner_user") or "",
+                        item.get("owner_contact") or "",
+                    )
                     admin_person = strip_domain(item.get("admin_user") or "")
 
                     clean_item = {
