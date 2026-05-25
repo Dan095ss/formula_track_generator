@@ -231,16 +231,18 @@ def make_ad_group_lookup():
                 member_of = ldap_conn.entries[0].memberOf.values
                 business = [dn for dn in member_of if _is_business_group(dn)]
                 if business:
-                    # приоритет: CN начинается с '_' (специфичные команды, _IT-группа и т.п.)
-                    # перед обычными отделами/офисами
                     business.sort(key=lambda d: (
                         0 if re.match(r"cn=_", d, re.IGNORECASE) else 1
                     ))
                     first_dn = business[0]
+                    is_preferred = bool(re.match(r"cn=_", first_dn, re.IGNORECASE))
                     cn_match = re.match(r"CN=([^,]+)", first_dn, re.IGNORECASE)
                     group = cn_match.group(1) if cn_match else first_dn
                     cache[key] = group
-                    logging.info(f"AD: '{username}' → group='{group}'")
+                    if is_preferred:
+                        logging.info(f"AD: '{username}' → group='{group}'")
+                    else:
+                        logging.info(f"AD: '{username}' → group='{group}' [fallback, нет _-группы]")
                     return group
                 if member_of:
                     logging.debug(f"AD: '{username}' — все {len(member_of)} групп отфильтрованы (должности/tech)")
