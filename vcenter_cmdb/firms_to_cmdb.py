@@ -123,7 +123,7 @@ def fetch_firms(**context):
                 "_emails": [],
             }
         if rec.get("email_group_name"):
-            firms[fid]["_groups"].append(_s(rec["email_group_name"]))
+            firms[fid]["_groups"].append(clean_name(_s(rec["email_group_name"])))
         if rec.get("email"):
             firms[fid]["_emails"].append(_s(rec["email"]))
 
@@ -175,18 +175,24 @@ def trigger_cmdb_loader(**context):
     logger.info(f"Запущен cmdb_ref_uploader: run_id={ref_run.run_id}")
 
     # ── 2. cmdb_universal_uploader_v2 (КЕ) ───────────────────────────────────
-    ke_conf = {
-        "ke_type": REF_TYPE_NAME,
-        "system": "1c_greenplum",
-        "data": records,
-    }
-    ke_run = trigger_dag(
-        dag_id='cmdb_universal_uploader_v2',
-        run_id=f"triggered__firms_ke_{ts}",
-        conf=ke_conf,
-        replace_microseconds=False,
-    )
-    logger.info(f"Запущен cmdb_universal_uploader_v2: run_id={ke_run.run_id}")
+    # ВРЕМЕННО ОТКЛЮЧЕНО: используем только ref uploader до устранения проблем
+    # с экранированием в названиях филиалов в CMDB.
+    #
+    # Когда включать обратно: после подтверждения что ref-данные корректно
+    # отображаются в CMDB без лишних backslash в полях name/name_for_link.
+    #
+    # ke_conf = {
+    #     "ke_type": REF_TYPE_NAME,
+    #     "system": "1c_greenplum",
+    #     "data": records,
+    # }
+    # ke_run = trigger_dag(
+    #     dag_id='cmdb_universal_uploader_v2',
+    #     run_id=f"triggered__firms_ke_{ts}",
+    #     conf=ke_conf,
+    #     replace_microseconds=False,
+    # )
+    # logger.info(f"Запущен cmdb_universal_uploader_v2: run_id={ke_run.run_id}")
 
 
 default_args = {
