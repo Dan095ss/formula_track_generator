@@ -157,28 +157,29 @@ def collect_and_transform(**context):
             srv_owner = (detail.get("owner") or "").strip() or sub_owner
             srv_admin = (detail.get("team") or "").strip() or sub_team
 
-            components_list.append({
-                "component_id": srv_id,
-                "name": srv_name.lower(),
-                "IS_name": sub_name,
-                "deployment_target": srv_name.lower(),
-                "owner": srv_owner,
-                "admin": srv_admin,
-                "role": _parse_role(srv_name),
-            })
-
             location = _location_prefix(srv_name)
             environment = _parse_env(srv_name)
+            instance_name = f"{sub_name} | {location}"
             key = (sub_name, location)
             if key not in instances_map:
                 instances_map[key] = {
+                    "name": instance_name,
                     "IS_name": sub_name,
                     "location": location,
                     "environment": environment,
                 }
             elif not instances_map[key]["environment"] and environment:
-                # уточняем среду если ранее не определили
                 instances_map[key]["environment"] = environment
+
+            components_list.append({
+                "component_id": srv_id,
+                "name": srv_name.lower(),
+                "IS_name": instance_name,
+                "deployment_target": srv_name.lower(),
+                "owner": srv_owner,
+                "admin": srv_admin,
+                "role": _parse_role(srv_name),
+            })
 
     instances_list = [
         {"instance_id": str(i), **inst}

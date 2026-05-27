@@ -149,23 +149,24 @@ def main():
             srv_owner = (detail.get("owner") or "").strip() or sub_owner
             srv_admin = (detail.get("team") or "").strip() or sub_team
 
+            loc = location_prefix(srv_name)
+            env = parse_env(srv_name)
+            instance_name = f"{sub_name} | {loc}"
+            key = (sub_name, loc)
+            if key not in instances_map:
+                instances_map[key] = {"name": instance_name, "IS_name": sub_name, "location": loc, "environment": env}
+            elif not instances_map[key]["environment"] and env:
+                instances_map[key]["environment"] = env
+
             components_list.append({
                 "component_id": srv_id,
                 "name": srv_name.lower(),
-                "IS_name": sub_name,
+                "IS_name": instance_name,
                 "deployment_target": srv_name.lower(),
                 "owner": srv_owner,
                 "admin": srv_admin,
                 "role": parse_role(srv_name),
             })
-
-            loc = location_prefix(srv_name)
-            env = parse_env(srv_name)
-            key = (sub_name, loc)
-            if key not in instances_map:
-                instances_map[key] = {"IS_name": sub_name, "location": loc, "environment": env}
-            elif not instances_map[key]["environment"] and env:
-                instances_map[key]["environment"] = env
 
     instances_list = [
         {"instance_id": str(i), **inst}
@@ -191,10 +192,10 @@ def main():
 
     # ── IS_INSTANCE ──────────────────────────────────────────────────
     print_section(f"КЕ: IS_INSTANCE  ({len(instances_list)} записей)")
-    print(f"  {'#':<6} {'IS_name':<40} {'location':<10} environment")
-    print(f"  {'-'*6} {'-'*40} {'-'*10} {'-'*10}")
+    print(f"  {'#':<6} {'name':<55} {'IS_name':<40} {'location':<10} environment")
+    print(f"  {'-'*6} {'-'*55} {'-'*40} {'-'*10} {'-'*10}")
     for r in instances_list:
-        print(f"  {r['instance_id']:<6} {r['IS_name'][:39]:<40} {r['location']:<10} {r['environment']}")
+        print(f"  {r['instance_id']:<6} {r['name'][:54]:<55} {r['IS_name'][:39]:<40} {r['location']:<10} {r['environment']}")
 
     # ── Итого ────────────────────────────────────────────────────────
     print_section("ИТОГО")
