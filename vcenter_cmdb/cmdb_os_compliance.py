@@ -392,13 +392,6 @@ def write_csv(rows: list[ReportRow], path: Path) -> None:
 # HTML Report
 # ============================================================
 
-_STATUS_BADGE = {
-    Status.OK:            ('<span class="badge ok">OK</span>',            "row-ok"),
-    Status.WARNING:       ('<span class="badge warning">WARNING</span>',   "row-warning"),
-    Status.NON_COMPLIANT: ('<span class="badge fail">NON_COMPLIANT</span>', "row-fail"),
-    Status.UNKNOWN:       ('<span class="badge unknown">UNKNOWN</span>',   "row-unknown"),
-}
-
 _HTML_TEMPLATE = """\
 <!DOCTYPE html>
 <html lang="ru">
@@ -409,28 +402,26 @@ _HTML_TEMPLATE = """\
 <style>
   * {{ box-sizing: border-box; margin: 0; padding: 0; }}
   body {{ font-family: 'Segoe UI', Arial, sans-serif; background: #f0f2f5; color: #1a1a2e; }}
-
   .page {{ max-width: 1400px; margin: 0 auto; padding: 24px 20px; }}
 
-  /* Header */
   .header {{ background: linear-gradient(135deg, #1a1a2e 0%, #16213e 60%, #0f3460 100%);
              color: #fff; border-radius: 12px; padding: 28px 32px; margin-bottom: 24px; }}
   .header h1 {{ font-size: 22px; font-weight: 700; letter-spacing: .5px; }}
   .header .meta {{ margin-top: 6px; font-size: 13px; opacity: .7; }}
 
-  /* Summary cards */
   .cards {{ display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 24px; }}
   .card {{ flex: 1; min-width: 140px; background: #fff; border-radius: 10px;
-           padding: 18px 20px; box-shadow: 0 1px 4px rgba(0,0,0,.08); }}
+           padding: 18px 20px; box-shadow: 0 1px 4px rgba(0,0,0,.08); cursor: pointer;
+           transition: box-shadow .15s; }}
+  .card:hover {{ box-shadow: 0 4px 12px rgba(0,0,0,.15); }}
   .card .num {{ font-size: 32px; font-weight: 700; line-height: 1; }}
   .card .lbl {{ font-size: 12px; color: #666; margin-top: 4px; text-transform: uppercase; letter-spacing: .6px; }}
-  .card.total  .num {{ color: #1a1a2e; }}
-  .card.ok     .num {{ color: #16a34a; }}
-  .card.warn   .num {{ color: #d97706; }}
-  .card.fail   .num {{ color: #dc2626; }}
-  .card.unk    .num {{ color: #6b7280; }}
+  .card.total .num {{ color: #1a1a2e; }}
+  .card.ok    .num {{ color: #16a34a; }}
+  .card.warn  .num {{ color: #d97706; }}
+  .card.fail  .num {{ color: #dc2626; }}
+  .card.unk   .num {{ color: #6b7280; }}
 
-  /* Filter bar */
   .filterbar {{ background: #fff; border-radius: 10px; padding: 14px 20px;
                 margin-bottom: 16px; box-shadow: 0 1px 4px rgba(0,0,0,.08);
                 display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }}
@@ -442,8 +433,9 @@ _HTML_TEMPLATE = """\
                  transition: all .15s; white-space: nowrap; }}
   .filter-btn:hover {{ background: #f3f4f6; }}
   .filter-btn.active {{ background: #0f3460; color: #fff; border-color: #0f3460; }}
+  .page-size-sel {{ padding: 7px 10px; border: 1px solid #d1d5db; border-radius: 6px;
+                    font-size: 13px; cursor: pointer; background: #fff; }}
 
-  /* Table */
   .table-wrap {{ background: #fff; border-radius: 10px; overflow: hidden;
                  box-shadow: 0 1px 4px rgba(0,0,0,.08); }}
   table {{ width: 100%; border-collapse: collapse; font-size: 13.5px; }}
@@ -452,7 +444,6 @@ _HTML_TEMPLATE = """\
               text-transform: uppercase; white-space: nowrap; }}
   tbody tr {{ border-bottom: 1px solid #f0f0f0; transition: background .1s; }}
   tbody tr:last-child {{ border-bottom: none; }}
-  tbody tr:hover {{ background: #f8fafc; }}
   td {{ padding: 10px 14px; vertical-align: top; }}
   td.host {{ font-family: 'Consolas', monospace; font-size: 13px; font-weight: 600; color: #0f3460; }}
   td.os   {{ color: #374151; }}
@@ -460,7 +451,6 @@ _HTML_TEMPLATE = """\
   td.ke   {{ font-size: 12px; color: #6b7280; white-space: nowrap; }}
   td.reason {{ font-size: 12px; color: #6b7280; }}
 
-  /* Row colours */
   .row-fail    {{ background: #fff5f5; }}
   .row-warning {{ background: #fffbeb; }}
   .row-ok      {{ background: #f0fdf4; }}
@@ -470,7 +460,6 @@ _HTML_TEMPLATE = """\
   .row-ok:hover      {{ background: #dcfce7; }}
   .row-unknown:hover {{ background: #f3f4f6; }}
 
-  /* Badges */
   .badge {{ display: inline-block; padding: 3px 10px; border-radius: 12px;
             font-size: 11px; font-weight: 700; letter-spacing: .4px; white-space: nowrap; }}
   .badge.ok      {{ background: #dcfce7; color: #15803d; }}
@@ -478,10 +467,23 @@ _HTML_TEMPLATE = """\
   .badge.fail    {{ background: #fee2e2; color: #b91c1c; }}
   .badge.unknown {{ background: #f3f4f6; color: #6b7280; }}
 
-  /* Footer */
-  .footer {{ text-align: center; margin-top: 20px; font-size: 12px; color: #9ca3af; }}
+  /* Pagination */
+  .pagination {{ display: flex; align-items: center; justify-content: space-between;
+                 padding: 14px 20px; background: #fff; border-top: 1px solid #f0f0f0;
+                 flex-wrap: wrap; gap: 10px; }}
+  .pag-info {{ font-size: 13px; color: #6b7280; }}
+  .pag-controls {{ display: flex; gap: 4px; align-items: center; flex-wrap: wrap; }}
+  .pag-btn {{ min-width: 34px; height: 34px; padding: 0 10px; border: 1px solid #d1d5db;
+              border-radius: 6px; background: #fff; cursor: pointer; font-size: 13px;
+              display: flex; align-items: center; justify-content: center;
+              transition: all .15s; white-space: nowrap; }}
+  .pag-btn:hover:not(:disabled) {{ background: #f3f4f6; }}
+  .pag-btn.active {{ background: #0f3460; color: #fff; border-color: #0f3460; font-weight: 700; }}
+  .pag-btn:disabled {{ opacity: .4; cursor: default; }}
+  .pag-ellipsis {{ padding: 0 6px; color: #9ca3af; font-size: 14px; }}
 
-  .hidden {{ display: none !important; }}
+  .footer {{ text-align: center; margin-top: 20px; font-size: 12px; color: #9ca3af; }}
+  .empty {{ padding: 40px; text-align: center; color: #9ca3af; font-size: 14px; }}
 </style>
 </head>
 <body>
@@ -493,84 +495,182 @@ _HTML_TEMPLATE = """\
   </div>
 
   <div class="cards">
-    <div class="card total"><div class="num">{total}</div><div class="lbl">Всего</div></div>
-    <div class="card ok">   <div class="num">{ok}</div>   <div class="lbl">Соответствует</div></div>
-    <div class="card warn"> <div class="num">{warning}</div><div class="lbl">Условно допустимо</div></div>
-    <div class="card fail"> <div class="num">{fail}</div>  <div class="lbl">Не соответствует</div></div>
-    <div class="card unk">  <div class="num">{unknown}</div><div class="lbl">Нет данных об ОС</div></div>
+    <div class="card total" onclick="filterByStatus('ALL')">
+      <div class="num">{total}</div><div class="lbl">Всего</div></div>
+    <div class="card ok"   onclick="filterByStatus('OK')">
+      <div class="num">{ok}</div><div class="lbl">Соответствует</div></div>
+    <div class="card warn" onclick="filterByStatus('WARNING')">
+      <div class="num">{warning}</div><div class="lbl">Условно допустимо</div></div>
+    <div class="card fail" onclick="filterByStatus('NON_COMPLIANT')">
+      <div class="num">{fail}</div><div class="lbl">Не соответствует</div></div>
+    <div class="card unk"  onclick="filterByStatus('UNKNOWN')">
+      <div class="num">{unknown}</div><div class="lbl">Нет данных об ОС</div></div>
   </div>
 
   <div class="filterbar">
     <input type="text" id="search" placeholder="Поиск по хосту, ОС или владельцу…" oninput="applyFilters()">
-    <button class="filter-btn active" data-status="ALL"          onclick="setStatus(this)">Все</button>
+    <button class="filter-btn active" data-status="ALL"           onclick="setStatus(this)">Все</button>
     <button class="filter-btn"        data-status="NON_COMPLIANT" onclick="setStatus(this)">Не соответствует</button>
     <button class="filter-btn"        data-status="WARNING"       onclick="setStatus(this)">Условно</button>
     <button class="filter-btn"        data-status="OK"            onclick="setStatus(this)">OK</button>
     <button class="filter-btn"        data-status="UNKNOWN"       onclick="setStatus(this)">Нет данных</button>
+    <select class="page-size-sel" onchange="changePageSize(this.value)">
+      <option value="50">50 / стр.</option>
+      <option value="100" selected>100 / стр.</option>
+      <option value="200">200 / стр.</option>
+      <option value="500">500 / стр.</option>
+    </select>
   </div>
 
   <div class="table-wrap">
-    <table id="main-table">
+    <table>
       <thead>
         <tr>
-          <th>Хост</th>
-          <th>ОС</th>
-          <th>Владелец</th>
-          <th>Тип КЕ</th>
-          <th>Статус</th>
-          <th>Причина</th>
+          <th>Хост</th><th>ОС</th><th>Владелец</th><th>Тип КЕ</th><th>Статус</th><th>Причина</th>
         </tr>
       </thead>
-      <tbody id="tbody">
-{rows_html}
-      </tbody>
+      <tbody id="tbody"></tbody>
     </table>
+    <div class="pagination">
+      <div class="pag-info" id="pag-info"></div>
+      <div class="pag-controls" id="pag-controls"></div>
+    </div>
   </div>
 
   <div class="footer">Регламент допустимых ОС от 13.05.2026 &nbsp;·&nbsp; CMDB OS Compliance Checker</div>
 </div>
 
 <script>
-  var activeStatus = 'ALL';
-  function setStatus(btn) {{
-    document.querySelectorAll('.filter-btn').forEach(function(b) {{ b.classList.remove('active'); }});
-    btn.classList.add('active');
-    activeStatus = btn.dataset.status;
-    applyFilters();
+var DATA = {data_json};
+
+var ROW_CLASS = {{
+  'OK': 'row-ok', 'WARNING': 'row-warning',
+  'NON_COMPLIANT': 'row-fail', 'UNKNOWN': 'row-unknown'
+}};
+var BADGE = {{
+  'OK':            '<span class="badge ok">OK</span>',
+  'WARNING':       '<span class="badge warning">WARNING</span>',
+  'NON_COMPLIANT': '<span class="badge fail">NON_COMPLIANT</span>',
+  'UNKNOWN':       '<span class="badge unknown">UNKNOWN</span>'
+}};
+
+var filtered = DATA.slice();
+var currentPage = 1;
+var pageSize = 100;
+var activeStatus = 'ALL';
+
+function esc(s) {{
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}}
+
+function render() {{
+  var tbody = document.getElementById('tbody');
+  var start = (currentPage - 1) * pageSize;
+  var page  = filtered.slice(start, start + pageSize);
+  if (filtered.length === 0) {{
+    tbody.innerHTML = '<tr><td colspan="6" class="empty">Ничего не найдено</td></tr>';
+  }} else {{
+    tbody.innerHTML = page.map(function(r) {{
+      return '<tr class="' + ROW_CLASS[r.status] + '">' +
+        '<td class="host">' + esc(r.shorthost) + '</td>' +
+        '<td class="os">'   + esc(r.os_name)   + '</td>' +
+        '<td class="own">'  + esc(r.owner)      + '</td>' +
+        '<td class="ke">'   + esc(r.ke_type)    + '</td>' +
+        '<td>' + BADGE[r.status] + '</td>' +
+        '<td class="reason">' + esc(r.reason)   + '</td>' +
+        '</tr>';
+    }}).join('');
   }}
-  function applyFilters() {{
-    var q = document.getElementById('search').value.toLowerCase();
-    document.querySelectorAll('#tbody tr').forEach(function(tr) {{
-      var text = tr.textContent.toLowerCase();
-      var status = tr.dataset.status;
-      var matchQ = !q || text.includes(q);
-      var matchS = activeStatus === 'ALL' || status === activeStatus;
-      tr.classList.toggle('hidden', !(matchQ && matchS));
-    }});
+  renderPagination();
+}}
+
+function renderPagination() {{
+  var total = filtered.length;
+  var totalPages = Math.max(1, Math.ceil(total / pageSize));
+  var start = total === 0 ? 0 : (currentPage - 1) * pageSize + 1;
+  var end   = Math.min(currentPage * pageSize, total);
+  document.getElementById('pag-info').textContent =
+    'Показано ' + start + '–' + end + ' из ' + total;
+
+  var html = '';
+  html += '<button class="pag-btn" onclick="goTo(1)" ' + (currentPage===1?'disabled':'') + '>&laquo;</button>';
+  html += '<button class="pag-btn" onclick="goTo(' + (currentPage-1) + ')" ' + (currentPage===1?'disabled':'') + '>&lsaquo;</button>';
+
+  var pages = pagesToShow(currentPage, totalPages);
+  var prev = null;
+  pages.forEach(function(p) {{
+    if (prev !== null && p - prev > 1) html += '<span class="pag-ellipsis">…</span>';
+    html += '<button class="pag-btn' + (p===currentPage?' active':'') + '" onclick="goTo(' + p + ')">' + p + '</button>';
+    prev = p;
+  }});
+
+  html += '<button class="pag-btn" onclick="goTo(' + (currentPage+1) + ')" ' + (currentPage===totalPages?'disabled':'') + '>&rsaquo;</button>';
+  html += '<button class="pag-btn" onclick="goTo(' + totalPages + ')" ' + (currentPage===totalPages?'disabled':'') + '>&raquo;</button>';
+  document.getElementById('pag-controls').innerHTML = html;
+}}
+
+function pagesToShow(cur, total) {{
+  var pages = [];
+  var delta = 2;
+  for (var p = 1; p <= total; p++) {{
+    if (p === 1 || p === total || (p >= cur - delta && p <= cur + delta)) pages.push(p);
   }}
+  return pages;
+}}
+
+function goTo(p) {{
+  var totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  currentPage = Math.max(1, Math.min(p, totalPages));
+  render();
+  window.scrollTo({{top: 0, behavior: 'smooth'}});
+}}
+
+function applyFilters() {{
+  var q = document.getElementById('search').value.toLowerCase();
+  filtered = DATA.filter(function(r) {{
+    var matchS = activeStatus === 'ALL' || r.status === activeStatus;
+    var matchQ = !q || (r.shorthost+r.os_name+r.owner+r.reason).toLowerCase().includes(q);
+    return matchS && matchQ;
+  }});
+  currentPage = 1;
+  render();
+}}
+
+function setStatus(btn) {{
+  document.querySelectorAll('.filter-btn').forEach(function(b) {{ b.classList.remove('active'); }});
+  btn.classList.add('active');
+  activeStatus = btn.dataset.status;
+  applyFilters();
+}}
+
+function filterByStatus(status) {{
+  activeStatus = status;
+  document.querySelectorAll('.filter-btn').forEach(function(b) {{
+    b.classList.toggle('active', b.dataset.status === status);
+  }});
+  applyFilters();
+}}
+
+function changePageSize(val) {{
+  pageSize = parseInt(val);
+  currentPage = 1;
+  render();
+}}
+
+render();
 </script>
 </body>
 </html>
 """
 
 
-def _row_html(r: ReportRow) -> str:
-    badge, row_cls = _STATUS_BADGE[r.status]
-    e = html_lib.escape
-    return (
-        f'        <tr class="{row_cls}" data-status="{r.status}">\n'
-        f'          <td class="host">{e(r.shorthost)}</td>\n'
-        f'          <td class="os">{e(r.os_name)}</td>\n'
-        f'          <td class="own">{e(r.owner)}</td>\n'
-        f'          <td class="ke">{e(r.ke_type)}</td>\n'
-        f'          <td>{badge}</td>\n'
-        f'          <td class="reason">{e(r.reason)}</td>\n'
-        f'        </tr>'
-    )
-
-
 def write_html(rows: list[ReportRow], summary: dict[str, int], path: Path) -> None:
-    rows_html = "\n".join(_row_html(r) for r in rows)
+    import json as _json
+    data = [
+        {"shorthost": r.shorthost, "os_name": r.os_name, "owner": r.owner,
+         "ke_type": r.ke_type, "status": r.status, "reason": r.reason}
+        for r in rows
+    ]
     content = _HTML_TEMPLATE.format(
         report_date=date.today().strftime("%d.%m.%Y"),
         generated_at=datetime.now().strftime("%d.%m.%Y %H:%M"),
@@ -579,7 +679,7 @@ def write_html(rows: list[ReportRow], summary: dict[str, int], path: Path) -> No
         warning=summary["WARNING"],
         fail=summary["NON_COMPLIANT"],
         unknown=summary["UNKNOWN"],
-        rows_html=rows_html,
+        data_json=_json.dumps(data, ensure_ascii=False),
     )
     path.write_text(content, encoding="utf-8")
 
