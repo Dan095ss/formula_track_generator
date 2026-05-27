@@ -1,23 +1,24 @@
 """CMDB OS Compliance Checker.
 
 Checks all HOST and VM CIs in CMDB against the corporate OS regulation
-(approved 2026-05-13). HOST os_name takes priority over VM when shorthost
-matches both types.
+(approved 2026-05-13). HOST os_name/owner takes priority over VM when
+shorthost matches both types.
 
 Usage:
-    python cmdb_os_compliance.py --url https://cmdb.example.com \
-        --token <api_token>
+    python cmdb_os_compliance.py --url https://cmdb.example.com --token <api_token>
 
 Env vars (fallback): CMDB_URL, CMDB_TOKEN
+Output: console table + CSV + HTML report
 """
 
 import argparse
 import csv
+import html as html_lib
 import logging
 import re
 import sys
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import date, datetime
 from enum import Enum
 from pathlib import Path
 from typing import Iterable, Iterator
@@ -60,6 +61,7 @@ class Config:
     token: str
     page_size: int = 500
     output_path: Path = field(default_factory=lambda: Path(f"os_compliance_report_{date.today():%Y%m%d}.csv"))
+    html_path: Path = field(default_factory=lambda: Path(f"os_compliance_report_{date.today():%Y%m%d}.html"))
     verify_ssl: bool = False
     timeout: int = 30
 
@@ -71,7 +73,8 @@ def load_config(argv: list[str] | None = None) -> Config:
     parser.add_argument("--url", default=os.environ.get("CMDB_URL"), help="CMDB base URL")
     parser.add_argument("--token", default=os.environ.get("CMDB_TOKEN"), help="CMDB API token")
     parser.add_argument("--page-size", type=int, default=500)
-    parser.add_argument("--output", type=Path, default=None)
+    parser.add_argument("--output", type=Path, default=None, help="CSV output path")
+    parser.add_argument("--html", type=Path, default=None, help="HTML output path")
 
     args = parser.parse_args(argv if argv is not None else sys.argv[1:])
 
@@ -79,12 +82,15 @@ def load_config(argv: list[str] | None = None) -> Config:
     if missing:
         parser.error(f"Required but not provided: {', '.join(missing)}")
 
-    output = args.output or Path(f"os_compliance_report_{date.today():%Y%m%d}.csv")
+    today = date.today().strftime("%Y%m%d")
+    output = args.output or Path(f"os_compliance_report_{today}.csv")
+    html_out = args.html or Path(f"os_compliance_report_{today}.html")
     return Config(
         cmdb_url=args.url.rstrip("/"),
         token=args.token,
         page_size=args.page_size,
         output_path=output,
+        html_path=html_out,
     )
 
 
@@ -109,21 +115,7 @@ class ClassificationResult:
 
 _STATUS_PRIORITY = {Status.NON_COMPLIANT: 0, Status.WARNING: 1, Status.UNKNOWN: 2, Status.OK: 3}
 
-# Windows build ordering: parse "NNHx" → (NN, x) where x: 1=H1, 2=H2
-_WIN11_BUILD_RE = re.compile(r"\b(\d{2})h([12])\b", re.IGNORECASE)
-
-
-def _parse_win11_build(text: str) -> tuple[int, int] | None:
-    m = _WIN11_BUILD_RE.search(text)
-    if m:
-        return int(m.group(1)), int(m.group(2))
-    return None
-
-
-def _build_ge(actual: tuple[int, int], minimum: tuple[int, int]) -> bool:
-    return actual >= minimum
-
-
+_WIN11_BUILD_RE     = re.compile(r"\b(\d{2})h([12])\b", re.IGNORECASE)
 _WIN_SERVER_YEAR_RE = re.compile(r"\b(2008|2012|2016|2019|2022|2025)(?:\s*r2)?\b", re.IGNORECASE)
 _UBUNTU_VER_RE      = re.compile(r"ubuntu\s+(\d+)\.(\d+)", re.IGNORECASE)
 _DEBIAN_VER_RE      = re.compile(r"debian[^\d]*(\d+)")
@@ -131,109 +123,98 @@ _ALMA_VER_RE        = re.compile(r"alma\w*\s*(?:linux\s*)?(\d+)", re.IGNORECASE)
 _RHEL_VER_RE        = re.compile(r"(?:rhel|red\s*hat[^0-9]*)\s*(\d+)", re.IGNORECASE)
 
 
+def _parse_win11_build(text: str) -> tuple[int, int] | None:
+    m = _WIN11_BUILD_RE.search(text)
+    return (int(m.group(1)), int(m.group(2))) if m else None
+
+
+def _build_ge(actual: tuple[int, int], minimum: tuple[int, int]) -> bool:
+    return actual >= minimum
+
+
 def _normalize(os_name: str) -> tuple[str, str]:
-    """Normalize os_name and split on first '|' → (head, tail)."""
     s = os_name.lower().strip()
     s = s.replace("майкрософт", "microsoft")
     s = re.sub(r"\s+", " ", s)
-    if "|" in s:
-        head, _, tail = s.partition("|")
-    else:
-        head, tail = s, ""
+    head, _, tail = s.partition("|")
     return head.strip(), tail.strip()
 
 
 def _classify_windows_client(head: str, tail: str) -> ClassificationResult:
-    # Detect Windows version number
     if re.search(r"\bwindows\s*10\b", head):
-        return ClassificationResult(Status.NON_COMPLIANT, "NON_COMPLIANT: Windows 10 not allowed", "windows_client")
-    if re.search(r"\bwindows\s*(?:8|8\.1|7|xp|vista)\b", head):
-        ver_m = re.search(r"\bwindows\s*(8\.1|8|7|xp|vista)\b", head)
-        ver = ver_m.group(1) if ver_m else "legacy"
-        return ClassificationResult(Status.NON_COMPLIANT, f"NON_COMPLIANT: Windows {ver} not allowed", "windows_client")
+        return ClassificationResult(Status.NON_COMPLIANT, "NON_COMPLIANT: Windows 10 не разрешён", "windows_client")
+    m = re.search(r"\bwindows\s*(8\.1|8|7|xp|vista)\b", head)
+    if m:
+        return ClassificationResult(Status.NON_COMPLIANT, f"NON_COMPLIANT: Windows {m.group(1)} не разрешён", "windows_client")
     if re.search(r"\bwindows\s*11\b", head):
         build = _parse_win11_build(tail) or _parse_win11_build(head)
         if build and _build_ge(build, (23, 2)):
             return ClassificationResult(Status.OK, f"OK: Windows 11 {build[0]}H{build[1]}", "windows_client", f"{build[0]}H{build[1]}")
-        elif build:
-            return ClassificationResult(Status.WARNING, f"WARNING: Windows 11 {build[0]}H{build[1]} — must be 23H2+", "windows_client", f"{build[0]}H{build[1]}")
-        else:
-            return ClassificationResult(Status.WARNING, "WARNING: Windows 11 build unknown — must be 23H2+", "windows_client")
-    # Generic 'windows' with no version
-    return ClassificationResult(Status.NON_COMPLIANT, "NON_COMPLIANT: Windows version not recognized", "windows_client")
+        if build:
+            return ClassificationResult(Status.WARNING, f"WARNING: Windows 11 {build[0]}H{build[1]} — требуется 23H2+", "windows_client", f"{build[0]}H{build[1]}")
+        return ClassificationResult(Status.WARNING, "WARNING: Windows 11 — версия сборки не определена (требуется 23H2+)", "windows_client")
+    return ClassificationResult(Status.NON_COMPLIANT, "NON_COMPLIANT: Версия Windows не определена", "windows_client")
 
 
 def _classify_windows_server(head: str, tail: str) -> ClassificationResult:
     m = _WIN_SERVER_YEAR_RE.search(head)
     if not m:
-        return ClassificationResult(Status.NON_COMPLIANT, "NON_COMPLIANT: Windows Server version not recognized", "windows_server")
+        return ClassificationResult(Status.NON_COMPLIANT, "NON_COMPLIANT: Версия Windows Server не определена", "windows_server")
     year = int(m.group(1))
     if year >= 2022:
         return ClassificationResult(Status.OK, f"OK: Windows Server {year}", "windows_server", str(year))
     if year == 2019:
-        return ClassificationResult(Status.WARNING, "WARNING: Windows Server 2019 — conditional (legacy/migration only)", "windows_server", "2019")
-    return ClassificationResult(Status.NON_COMPLIANT, f"NON_COMPLIANT: Windows Server {year} not allowed (minimum 2022)", "windows_server", str(year))
+        return ClassificationResult(Status.WARNING, "WARNING: Windows Server 2019 — допустим временно (только legacy/миграция)", "windows_server", "2019")
+    return ClassificationResult(Status.NON_COMPLIANT, f"NON_COMPLIANT: Windows Server {year} — минимум 2022", "windows_server", str(year))
 
 
 def _classify_ubuntu(head: str, tail: str) -> ClassificationResult:
     m = _UBUNTU_VER_RE.search(head) or _UBUNTU_VER_RE.search(tail)
     if not m:
-        return ClassificationResult(Status.NON_COMPLIANT, "NON_COMPLIANT: Ubuntu version not parseable", "linux")
+        return ClassificationResult(Status.NON_COMPLIANT, "NON_COMPLIANT: Версия Ubuntu не определена", "linux")
     major, minor = int(m.group(1)), int(m.group(2))
     is_lts = (major % 2 == 0) and (minor == 4)
     if not is_lts:
-        return ClassificationResult(Status.NON_COMPLIANT, f"NON_COMPLIANT: Ubuntu {major}.{minor:02d} is non-LTS (forbidden)", "linux", f"{major}.{minor:02d}")
+        return ClassificationResult(Status.NON_COMPLIANT, f"NON_COMPLIANT: Ubuntu {major}.{minor:02d} — non-LTS запрещена", "linux", f"{major}.{minor:02d}")
     if major >= 22:
         return ClassificationResult(Status.OK, f"OK: Ubuntu {major}.{minor:02d} LTS", "linux", f"{major}.{minor:02d}")
-    return ClassificationResult(Status.NON_COMPLIANT, f"NON_COMPLIANT: Ubuntu {major}.{minor:02d} LTS — below 22.04 minimum", "linux", f"{major}.{minor:02d}")
+    return ClassificationResult(Status.NON_COMPLIANT, f"NON_COMPLIANT: Ubuntu {major}.{minor:02d} LTS — ниже минимума 22.04", "linux", f"{major}.{minor:02d}")
 
 
 def _classify_linux(head: str, tail: str) -> ClassificationResult:
     if re.search(r"\bubuntu\b", head):
         return _classify_ubuntu(head, tail)
-
     m = _DEBIAN_VER_RE.search(head)
     if m:
         v = int(m.group(1))
-        if v >= 12:
-            return ClassificationResult(Status.OK, f"OK: Debian {v}", "linux", str(v))
-        return ClassificationResult(Status.NON_COMPLIANT, f"NON_COMPLIANT: Debian {v} — minimum Debian 12", "linux", str(v))
-
+        return (ClassificationResult(Status.OK, f"OK: Debian {v}", "linux", str(v)) if v >= 12
+                else ClassificationResult(Status.NON_COMPLIANT, f"NON_COMPLIANT: Debian {v} — минимум Debian 12", "linux", str(v)))
     m = _ALMA_VER_RE.search(head)
     if m:
         v = int(m.group(1))
-        if v >= 9:
-            return ClassificationResult(Status.OK, f"OK: AlmaLinux {v}", "linux", str(v))
-        return ClassificationResult(Status.NON_COMPLIANT, f"NON_COMPLIANT: AlmaLinux {v} — minimum 9", "linux", str(v))
-
+        return (ClassificationResult(Status.OK, f"OK: AlmaLinux {v}", "linux", str(v)) if v >= 9
+                else ClassificationResult(Status.NON_COMPLIANT, f"NON_COMPLIANT: AlmaLinux {v} — минимум 9", "linux", str(v)))
     m = _RHEL_VER_RE.search(head)
     if m:
         v = int(m.group(1))
-        if v >= 9:
-            return ClassificationResult(Status.OK, f"OK: RHEL {v}", "linux", str(v))
-        return ClassificationResult(Status.NON_COMPLIANT, f"NON_COMPLIANT: RHEL {v} — minimum 9", "linux", str(v))
-
+        return (ClassificationResult(Status.OK, f"OK: RHEL {v}", "linux", str(v)) if v >= 9
+                else ClassificationResult(Status.NON_COMPLIANT, f"NON_COMPLIANT: RHEL {v} — минимум 9", "linux", str(v)))
     if re.search(r"\bcentos\b", head):
-        return ClassificationResult(Status.NON_COMPLIANT, "NON_COMPLIANT: CentOS not in allowed list", "linux")
-
-    return ClassificationResult(Status.NON_COMPLIANT, "NON_COMPLIANT: Linux distribution not in allowed list", "linux")
+        return ClassificationResult(Status.NON_COMPLIANT, "NON_COMPLIANT: CentOS не входит в список допустимых ОС", "linux")
+    return ClassificationResult(Status.NON_COMPLIANT, "NON_COMPLIANT: Дистрибутив Linux не входит в список допустимых", "linux")
 
 
 def classify_os(os_name: str | None) -> ClassificationResult:
-    """Classify an os_name string against the corporate OS regulation."""
     if not os_name:
-        return ClassificationResult(Status.UNKNOWN, "UNKNOWN: os_name missing", "unknown")
-
+        return ClassificationResult(Status.UNKNOWN, "UNKNOWN: os_name отсутствует в CMDB", "unknown")
     head, tail = _normalize(os_name)
-
     if re.search(r"\bwindows server\b", head):
         return _classify_windows_server(head, tail)
     if re.search(r"\bwindows\b", head):
         return _classify_windows_client(head, tail)
     if re.search(r"\b(?:ubuntu|debian|almalinux|alma linux|red hat|rhel|centos)\b", head):
         return _classify_linux(head, tail)
-
-    return ClassificationResult(Status.NON_COMPLIANT, f"NON_COMPLIANT: unrecognized OS", "unknown")
+    return ClassificationResult(Status.NON_COMPLIANT, "NON_COMPLIANT: ОС не распознана", "unknown")
 
 
 # ============================================================
@@ -241,7 +222,6 @@ def classify_os(os_name: str | None) -> ClassificationResult:
 # ============================================================
 
 def extract_attrs(ci: dict) -> dict[str, str]:
-    """Flatten ci['attrs'] into {type.name.lower(): bvalue}, skip empty values."""
     attrs = ci.get("attrs") or []
     result: dict[str, str] = {}
     for attr in attrs:
@@ -261,14 +241,22 @@ def extract_attrs(ci: dict) -> dict[str, str]:
 
 
 def shorthost_of(ci: dict) -> str | None:
-    attrs = extract_attrs(ci)
-    val = attrs.get("shorthost", "").strip().lower()
+    val = extract_attrs(ci).get("shorthost", "").strip().lower()
     return val or None
 
 
 def os_name_of(ci: dict) -> str | None:
+    return extract_attrs(ci).get("os_name") or None
+
+
+def owner_of(ci: dict) -> str | None:
+    """Return owner display string: 'owner / owner_person' or just one of them."""
     attrs = extract_attrs(ci)
-    return attrs.get("os_name") or None
+    owner = attrs.get("owner", "").strip()
+    person = (attrs.get("owner_person") or attrs.get("admin_person") or "").strip()
+    if owner and person:
+        return f"{owner} / {person}"
+    return owner or person or None
 
 
 # ============================================================
@@ -279,6 +267,7 @@ def os_name_of(ci: dict) -> str | None:
 class HostRecord:
     shorthost: str
     os_name: str | None
+    owner: str | None
     sources: set[str]
 
     @property
@@ -294,7 +283,7 @@ def build_inventory(
     host_cis: Iterable[dict],
     vm_cis: Iterable[dict],
 ) -> dict[str, HostRecord]:
-    """Build {shorthost: HostRecord} with HOST priority on os_name."""
+    """Build {shorthost: HostRecord}. HOST os_name and owner take priority over VM."""
     inv: dict[str, HostRecord] = {}
 
     skip_host = 0
@@ -304,13 +293,16 @@ def build_inventory(
             skip_host += 1
             continue
         osn = os_name_of(ci)
+        own = owner_of(ci)
         if sh in inv:
-            log.warning("Duplicate HOST shorthost %r — keeping first os_name", sh)
+            log.warning("Duplicate HOST shorthost %r — keeping first values", sh)
             inv[sh].sources.add("HOST")
             if inv[sh].os_name is None and osn:
                 inv[sh].os_name = osn
+            if inv[sh].owner is None and own:
+                inv[sh].owner = own
         else:
-            inv[sh] = HostRecord(shorthost=sh, os_name=osn, sources={"HOST"})
+            inv[sh] = HostRecord(shorthost=sh, os_name=osn, owner=own, sources={"HOST"})
 
     if skip_host:
         log.debug("Skipped %d HOST CIs without shorthost", skip_host)
@@ -322,11 +314,12 @@ def build_inventory(
             skip_vm += 1
             continue
         osn = os_name_of(ci)
+        own = owner_of(ci)
         if sh in inv:
             inv[sh].sources.add("VM")
-            # HOST os_name wins — do NOT overwrite
+            # HOST values win — do NOT overwrite
         else:
-            inv[sh] = HostRecord(shorthost=sh, os_name=osn, sources={"VM"})
+            inv[sh] = HostRecord(shorthost=sh, os_name=osn, owner=own, sources={"VM"})
 
     if skip_vm:
         log.debug("Skipped %d VM CIs without shorthost", skip_vm)
@@ -342,6 +335,7 @@ def build_inventory(
 class ReportRow:
     shorthost: str
     os_name: str
+    owner: str
     ke_type: str
     status: Status
     reason: str
@@ -354,6 +348,7 @@ def build_report(inventory: dict[str, HostRecord]) -> list[ReportRow]:
         rows.append(ReportRow(
             shorthost=rec.shorthost,
             os_name=rec.os_name or "",
+            owner=rec.owner or "",
             ke_type=rec.ke_type,
             status=result.status,
             reason=result.reason,
@@ -370,17 +365,17 @@ def summarize(rows: list[ReportRow]) -> dict[str, int]:
 
 
 def print_console_table(rows: list[ReportRow], summary: dict[str, int]) -> None:
-    COL = [40, 55, 10, 14]
-    header = ["shorthost", "os_name", "ke_type", "status"]
-    sep = "-" * (sum(COL) + len(COL) * 3 + 1)
+    COL = [35, 50, 30, 10, 14]
+    header = ["shorthost", "os_name", "owner", "ke_type", "status"]
+    sep = "-" * (sum(COL) + len(COL) * 2 + 1)
     print(sep)
     print("  ".join(h.ljust(w) for h, w in zip(header, COL)))
     print(sep)
     for r in rows:
-        cells = [r.shorthost[:COL[0]], r.os_name[:COL[1]], r.ke_type[:COL[2]], r.status]
+        cells = [r.shorthost[:COL[0]], r.os_name[:COL[1]], r.owner[:COL[2]], r.ke_type[:COL[3]], r.status]
         print("  ".join(str(c).ljust(w) for c, w in zip(cells, COL)))
     print(sep)
-    print(f"\nTotal: {summary['total']}  OK: {summary['OK']}  "
+    print(f"\nИтого: {summary['total']}  |  OK: {summary['OK']}  "
           f"WARNING: {summary['WARNING']}  NON_COMPLIANT: {summary['NON_COMPLIANT']}  "
           f"UNKNOWN: {summary['UNKNOWN']}")
 
@@ -388,9 +383,205 @@ def print_console_table(rows: list[ReportRow], summary: dict[str, int]) -> None:
 def write_csv(rows: list[ReportRow], path: Path) -> None:
     with open(path, "w", newline="", encoding="utf-8-sig") as f:
         writer = csv.writer(f)
-        writer.writerow(["shorthost", "os_name", "ke_type", "status", "reason"])
+        writer.writerow(["shorthost", "os_name", "owner", "ke_type", "status", "reason"])
         for r in rows:
-            writer.writerow([r.shorthost, r.os_name, r.ke_type, r.status, r.reason])
+            writer.writerow([r.shorthost, r.os_name, r.owner, r.ke_type, r.status, r.reason])
+
+
+# ============================================================
+# HTML Report
+# ============================================================
+
+_STATUS_BADGE = {
+    Status.OK:            ('<span class="badge ok">OK</span>',            "row-ok"),
+    Status.WARNING:       ('<span class="badge warning">WARNING</span>',   "row-warning"),
+    Status.NON_COMPLIANT: ('<span class="badge fail">NON_COMPLIANT</span>', "row-fail"),
+    Status.UNKNOWN:       ('<span class="badge unknown">UNKNOWN</span>',   "row-unknown"),
+}
+
+_HTML_TEMPLATE = """\
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Отчёт соответствия ОС регламенту — {report_date}</title>
+<style>
+  * {{ box-sizing: border-box; margin: 0; padding: 0; }}
+  body {{ font-family: 'Segoe UI', Arial, sans-serif; background: #f0f2f5; color: #1a1a2e; }}
+
+  .page {{ max-width: 1400px; margin: 0 auto; padding: 24px 20px; }}
+
+  /* Header */
+  .header {{ background: linear-gradient(135deg, #1a1a2e 0%, #16213e 60%, #0f3460 100%);
+             color: #fff; border-radius: 12px; padding: 28px 32px; margin-bottom: 24px; }}
+  .header h1 {{ font-size: 22px; font-weight: 700; letter-spacing: .5px; }}
+  .header .meta {{ margin-top: 6px; font-size: 13px; opacity: .7; }}
+
+  /* Summary cards */
+  .cards {{ display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 24px; }}
+  .card {{ flex: 1; min-width: 140px; background: #fff; border-radius: 10px;
+           padding: 18px 20px; box-shadow: 0 1px 4px rgba(0,0,0,.08); }}
+  .card .num {{ font-size: 32px; font-weight: 700; line-height: 1; }}
+  .card .lbl {{ font-size: 12px; color: #666; margin-top: 4px; text-transform: uppercase; letter-spacing: .6px; }}
+  .card.total  .num {{ color: #1a1a2e; }}
+  .card.ok     .num {{ color: #16a34a; }}
+  .card.warn   .num {{ color: #d97706; }}
+  .card.fail   .num {{ color: #dc2626; }}
+  .card.unk    .num {{ color: #6b7280; }}
+
+  /* Filter bar */
+  .filterbar {{ background: #fff; border-radius: 10px; padding: 14px 20px;
+                margin-bottom: 16px; box-shadow: 0 1px 4px rgba(0,0,0,.08);
+                display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }}
+  .filterbar input {{ flex: 1; min-width: 200px; padding: 8px 12px; border: 1px solid #d1d5db;
+                      border-radius: 6px; font-size: 14px; outline: none; }}
+  .filterbar input:focus {{ border-color: #0f3460; box-shadow: 0 0 0 3px rgba(15,52,96,.12); }}
+  .filter-btn {{ padding: 8px 16px; border: 1px solid #d1d5db; border-radius: 6px;
+                 background: #fff; cursor: pointer; font-size: 13px; font-weight: 500;
+                 transition: all .15s; white-space: nowrap; }}
+  .filter-btn:hover {{ background: #f3f4f6; }}
+  .filter-btn.active {{ background: #0f3460; color: #fff; border-color: #0f3460; }}
+
+  /* Table */
+  .table-wrap {{ background: #fff; border-radius: 10px; overflow: hidden;
+                 box-shadow: 0 1px 4px rgba(0,0,0,.08); }}
+  table {{ width: 100%; border-collapse: collapse; font-size: 13.5px; }}
+  thead th {{ background: #1a1a2e; color: #fff; padding: 12px 14px; text-align: left;
+              font-weight: 600; font-size: 12px; letter-spacing: .5px;
+              text-transform: uppercase; white-space: nowrap; }}
+  tbody tr {{ border-bottom: 1px solid #f0f0f0; transition: background .1s; }}
+  tbody tr:last-child {{ border-bottom: none; }}
+  tbody tr:hover {{ background: #f8fafc; }}
+  td {{ padding: 10px 14px; vertical-align: top; }}
+  td.host {{ font-family: 'Consolas', monospace; font-size: 13px; font-weight: 600; color: #0f3460; }}
+  td.os   {{ color: #374151; }}
+  td.own  {{ color: #4b5563; font-size: 13px; }}
+  td.ke   {{ font-size: 12px; color: #6b7280; white-space: nowrap; }}
+  td.reason {{ font-size: 12px; color: #6b7280; }}
+
+  /* Row colours */
+  .row-fail    {{ background: #fff5f5; }}
+  .row-warning {{ background: #fffbeb; }}
+  .row-ok      {{ background: #f0fdf4; }}
+  .row-unknown {{ background: #f9fafb; }}
+  .row-fail:hover    {{ background: #fee2e2; }}
+  .row-warning:hover {{ background: #fef3c7; }}
+  .row-ok:hover      {{ background: #dcfce7; }}
+  .row-unknown:hover {{ background: #f3f4f6; }}
+
+  /* Badges */
+  .badge {{ display: inline-block; padding: 3px 10px; border-radius: 12px;
+            font-size: 11px; font-weight: 700; letter-spacing: .4px; white-space: nowrap; }}
+  .badge.ok      {{ background: #dcfce7; color: #15803d; }}
+  .badge.warning {{ background: #fef3c7; color: #b45309; }}
+  .badge.fail    {{ background: #fee2e2; color: #b91c1c; }}
+  .badge.unknown {{ background: #f3f4f6; color: #6b7280; }}
+
+  /* Footer */
+  .footer {{ text-align: center; margin-top: 20px; font-size: 12px; color: #9ca3af; }}
+
+  .hidden {{ display: none !important; }}
+</style>
+</head>
+<body>
+<div class="page">
+
+  <div class="header">
+    <h1>Отчёт соответствия ОС корпоративному регламенту</h1>
+    <div class="meta">Сформирован: {generated_at} &nbsp;·&nbsp; Всего КЕ: {total}</div>
+  </div>
+
+  <div class="cards">
+    <div class="card total"><div class="num">{total}</div><div class="lbl">Всего</div></div>
+    <div class="card ok">   <div class="num">{ok}</div>   <div class="lbl">Соответствует</div></div>
+    <div class="card warn"> <div class="num">{warning}</div><div class="lbl">Условно допустимо</div></div>
+    <div class="card fail"> <div class="num">{fail}</div>  <div class="lbl">Не соответствует</div></div>
+    <div class="card unk">  <div class="num">{unknown}</div><div class="lbl">Нет данных об ОС</div></div>
+  </div>
+
+  <div class="filterbar">
+    <input type="text" id="search" placeholder="Поиск по хосту, ОС или владельцу…" oninput="applyFilters()">
+    <button class="filter-btn active" data-status="ALL"          onclick="setStatus(this)">Все</button>
+    <button class="filter-btn"        data-status="NON_COMPLIANT" onclick="setStatus(this)">Не соответствует</button>
+    <button class="filter-btn"        data-status="WARNING"       onclick="setStatus(this)">Условно</button>
+    <button class="filter-btn"        data-status="OK"            onclick="setStatus(this)">OK</button>
+    <button class="filter-btn"        data-status="UNKNOWN"       onclick="setStatus(this)">Нет данных</button>
+  </div>
+
+  <div class="table-wrap">
+    <table id="main-table">
+      <thead>
+        <tr>
+          <th>Хост</th>
+          <th>ОС</th>
+          <th>Владелец</th>
+          <th>Тип КЕ</th>
+          <th>Статус</th>
+          <th>Причина</th>
+        </tr>
+      </thead>
+      <tbody id="tbody">
+{rows_html}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="footer">Регламент допустимых ОС от 13.05.2026 &nbsp;·&nbsp; CMDB OS Compliance Checker</div>
+</div>
+
+<script>
+  var activeStatus = 'ALL';
+  function setStatus(btn) {{
+    document.querySelectorAll('.filter-btn').forEach(function(b) {{ b.classList.remove('active'); }});
+    btn.classList.add('active');
+    activeStatus = btn.dataset.status;
+    applyFilters();
+  }}
+  function applyFilters() {{
+    var q = document.getElementById('search').value.toLowerCase();
+    document.querySelectorAll('#tbody tr').forEach(function(tr) {{
+      var text = tr.textContent.toLowerCase();
+      var status = tr.dataset.status;
+      var matchQ = !q || text.includes(q);
+      var matchS = activeStatus === 'ALL' || status === activeStatus;
+      tr.classList.toggle('hidden', !(matchQ && matchS));
+    }});
+  }}
+</script>
+</body>
+</html>
+"""
+
+
+def _row_html(r: ReportRow) -> str:
+    badge, row_cls = _STATUS_BADGE[r.status]
+    e = html_lib.escape
+    return (
+        f'        <tr class="{row_cls}" data-status="{r.status}">\n'
+        f'          <td class="host">{e(r.shorthost)}</td>\n'
+        f'          <td class="os">{e(r.os_name)}</td>\n'
+        f'          <td class="own">{e(r.owner)}</td>\n'
+        f'          <td class="ke">{e(r.ke_type)}</td>\n'
+        f'          <td>{badge}</td>\n'
+        f'          <td class="reason">{e(r.reason)}</td>\n'
+        f'        </tr>'
+    )
+
+
+def write_html(rows: list[ReportRow], summary: dict[str, int], path: Path) -> None:
+    rows_html = "\n".join(_row_html(r) for r in rows)
+    content = _HTML_TEMPLATE.format(
+        report_date=date.today().strftime("%d.%m.%Y"),
+        generated_at=datetime.now().strftime("%d.%m.%Y %H:%M"),
+        total=summary["total"],
+        ok=summary["OK"],
+        warning=summary["WARNING"],
+        fail=summary["NON_COMPLIANT"],
+        unknown=summary["UNKNOWN"],
+        rows_html=rows_html,
+    )
+    path.write_text(content, encoding="utf-8")
 
 
 # ============================================================
@@ -406,12 +597,11 @@ class CmdbClient:
         self._base = config.cmdb_url + "/api/v1"
 
     def check_auth(self) -> None:
-        """Verify the token works by hitting a lightweight endpoint."""
         resp = self._session.get(f"{self._base}/user/me", timeout=self._cfg.timeout)
         if resp.status_code == 401:
-            raise CmdbAuthError("Token rejected (401 Unauthorized)")
+            raise CmdbAuthError("Токен отклонён (401 Unauthorized)")
         if resp.status_code == 403:
-            raise CmdbAuthError("Token valid but insufficient permissions (403 Forbidden)")
+            raise CmdbAuthError("Токен действителен, но недостаточно прав (403 Forbidden)")
         if resp.status_code not in (200, 404):
             raise CmdbHTTPError(resp.status_code, resp.text)
         log.info("CMDB token accepted")
@@ -428,7 +618,7 @@ class CmdbClient:
         items = data if isinstance(data, list) else data.get("data", [])
         matches = [it for it in items if it.get("name", "").upper() == name.upper()]
         if not matches:
-            raise CmdbError(f"CI type {name!r} not found in CMDB")
+            raise CmdbError(f"CI type {name!r} не найден в CMDB")
         if len(matches) > 1:
             log.warning("Multiple CI types match %r — using first: %s", name, matches[0]["uuid"])
         return matches[0]["uuid"]
@@ -447,9 +637,8 @@ class CmdbClient:
             body = resp.json()
             if total_pages is None:
                 total_pages = body.get("total_pages", 1)
-                log.info("CI type %s: %d total items, %d pages", ci_type_uuid, body.get("total_items", "?"), total_pages)
-            for ci in body.get("page_data", []):
-                yield ci
+                log.info("CI type %s: %d items, %d pages", ci_type_uuid, body.get("total_items", "?"), total_pages)
+            yield from body.get("page_data", [])
             log.debug("Fetched page %d/%d", page, total_pages)
             if page >= total_pages:
                 break
@@ -481,15 +670,17 @@ def main(argv: list[str] | None = None) -> int:
         summary = summarize(rows)
         print_console_table(rows, summary)
         write_csv(rows, config.output_path)
-        log.info("Report written: %s (%d rows)", config.output_path, len(rows))
+        write_html(rows, summary, config.html_path)
+        log.info("CSV:  %s", config.output_path)
+        log.info("HTML: %s", config.html_path)
     except CmdbAuthError as e:
-        log.error("Authentication error: %s", e)
+        log.error("Ошибка аутентификации: %s", e)
         return 2
     except CmdbError as e:
-        log.error("CMDB error: %s", e)
+        log.error("Ошибка CMDB: %s", e)
         return 3
     except Exception as e:
-        log.exception("Unexpected error: %s", e)
+        log.exception("Неожиданная ошибка: %s", e)
         return 3
 
     return 1 if summary.get("NON_COMPLIANT", 0) > 0 else 0

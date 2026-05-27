@@ -21,9 +21,11 @@ from vcenter_cmdb.cmdb_os_compliance import (
     extract_attrs,
     load_config,
     os_name_of,
+    owner_of,
     shorthost_of,
     summarize,
     write_csv,
+    write_html,
 )
 
 
@@ -198,37 +200,57 @@ def test_os_name_of_missing():
     assert os_name_of(ci) is None
 
 
+def test_owner_of_both_fields():
+    ci = _make_ci({"owner": "IT-группа Сириус", "owner_person": "Ivanov.AA", "shorthost": "s1"})
+    assert owner_of(ci) == "IT-группа Сириус / Ivanov.AA"
+
+
+def test_owner_of_only_owner():
+    ci = _make_ci({"owner": "IT-группа Сириус", "shorthost": "s1"})
+    assert owner_of(ci) == "IT-группа Сириус"
+
+
+def test_owner_of_missing():
+    ci = _make_ci({"shorthost": "s1"})
+    assert owner_of(ci) is None
+
+
 # ============================================================
 # 4. Inventory aggregation
 # ============================================================
 
-def _ci(shorthost: str, os_name: str | None) -> dict:
+def _ci(shorthost: str, os_name: str | None, owner: str | None = None) -> dict:
     attrs = {"shorthost": shorthost}
     if os_name:
         attrs["os_name"] = os_name
+    if owner:
+        attrs["owner"] = owner
     return _make_ci(attrs)
 
 
 def test_build_inventory_host_only():
-    hosts = [_ci("srv01", "ubuntu 22.04 lts|...")]
+    hosts = [_ci("srv01", "ubuntu 22.04 lts|...", "IT-группа A")]
     inv = build_inventory(hosts, [])
     assert "srv01" in inv
     assert inv["srv01"].sources == {"HOST"}
     assert inv["srv01"].os_name == "ubuntu 22.04 lts|..."
+    assert inv["srv01"].owner == "IT-группа A"
 
 
 def test_build_inventory_vm_only():
-    vms = [_ci("vm01", "windows server 2022|")]
+    vms = [_ci("vm01", "windows server 2022|", "IT-группа B")]
     inv = build_inventory([], vms)
     assert "vm01" in inv
     assert inv["vm01"].sources == {"VM"}
+    assert inv["vm01"].owner == "IT-группа B"
 
 
 def test_build_inventory_host_priority():
-    hosts = [_ci("srv01", "ubuntu 22.04 lts|host")]
-    vms   = [_ci("srv01", "ubuntu 20.04 lts|vm")]
+    hosts = [_ci("srv01", "ubuntu 22.04 lts|host", "HOST-owner")]
+    vms   = [_ci("srv01", "ubuntu 20.04 lts|vm", "VM-owner")]
     inv = build_inventory(hosts, vms)
     assert inv["srv01"].os_name == "ubuntu 22.04 lts|host"
+    assert inv["srv01"].owner == "HOST-owner"
     assert inv["srv01"].sources == {"HOST", "VM"}
     assert inv["srv01"].ke_type == "HOST+VM"
 
@@ -238,8 +260,7 @@ def test_build_inventory_case_insensitive_merge():
     vms   = [_ci("srv01", "windows 10|...")]
     inv = build_inventory(hosts, vms)
     assert len(inv) == 1
-    key = list(inv.keys())[0]
-    assert key == "srv01"
+    assert list(inv.keys())[0] == "srv01"
 
 
 def test_build_inventory_skips_no_shorthost():
@@ -252,19 +273,21 @@ def test_build_inventory_skips_no_shorthost():
 # 5. Reporting
 # ============================================================
 
-def _make_inventory(entries: list[tuple[str, str | None, set[str]]]) -> dict[str, HostRecord]:
-    return {
-        sh: HostRecord(shorthost=sh, os_name=osn, sources=src)
-        for sh, osn, src in entries
-    }
+def _make_inventory(entries: list[tuple]) -> dict[str, HostRecord]:
+    result = {}
+    for entry in entries:
+        sh, osn, src = entry[0], entry[1], entry[2]
+        own = entry[3] if len(entry) > 3 else None
+        result[sh] = HostRecord(shorthost=sh, os_name=osn, owner=own, sources=src)
+    return result
 
 
 def test_summarize_counts():
     rows = [
-        ReportRow("h1", "...", "HOST", Status.OK,            "ok"),
-        ReportRow("h2", "...", "VM",   Status.NON_COMPLIANT, "bad"),
-        ReportRow("h3", "...", "HOST", Status.WARNING,       "warn"),
-        ReportRow("h4", "...", "VM",   Status.NON_COMPLIANT, "bad2"),
+        ReportRow("h1", "...", "", "HOST", Status.OK,            "ok"),
+        ReportRow("h2", "...", "", "VM",   Status.NON_COMPLIANT, "bad"),
+        ReportRow("h3", "...", "", "HOST", Status.WARNING,       "warn"),
+        ReportRow("h4", "...", "", "VM",   Status.NON_COMPLIANT, "bad2"),
     ]
     s = summarize(rows)
     assert s["total"] == 4
@@ -275,23 +298,29 @@ def test_summarize_counts():
 
 def test_build_report_sort_order():
     inv = _make_inventory([
-        ("z-host", "ubuntu 22.04 lts|...", {"HOST"}),  # OK
-        ("a-host", "windows 10 pro|22h2",  {"VM"}),    # NON_COMPLIANT
-        ("m-host", "windows server 2019|", {"HOST"}),  # WARNING
+        ("z-host", "ubuntu 22.04 lts|...", {"HOST"}),
+        ("a-host", "windows 10 pro|22h2",  {"VM"}),
+        ("m-host", "windows server 2019|", {"HOST"}),
     ])
     rows = build_report(inv)
-    statuses = [r.status for r in rows]
-    # NON_COMPLIANT must come before WARNING before OK
-    nc_idx = next(i for i, r in enumerate(rows) if r.status == Status.NON_COMPLIANT)
+    nc_idx   = next(i for i, r in enumerate(rows) if r.status == Status.NON_COMPLIANT)
     warn_idx = next(i for i, r in enumerate(rows) if r.status == Status.WARNING)
-    ok_idx = next(i for i, r in enumerate(rows) if r.status == Status.OK)
+    ok_idx   = next(i for i, r in enumerate(rows) if r.status == Status.OK)
     assert nc_idx < warn_idx < ok_idx
+
+
+def test_build_report_includes_owner():
+    inv = _make_inventory([
+        ("srv01", "ubuntu 22.04 lts|...", {"HOST"}, "IT-группа Сириус"),
+    ])
+    rows = build_report(inv)
+    assert rows[0].owner == "IT-группа Сириус"
 
 
 def test_write_csv_roundtrip(tmp_path):
     rows = [
-        ReportRow("srv01", "ubuntu 22.04 lts|джамми", "HOST", Status.OK, "ok"),
-        ReportRow("vm01",  "майкрософт windows 10|22h2", "VM", Status.NON_COMPLIANT, "bad"),
+        ReportRow("srv01", "ubuntu 22.04 lts|джамми", "IT-группа A", "HOST", Status.OK, "ok"),
+        ReportRow("vm01",  "майкрософт windows 10|22h2", "", "VM", Status.NON_COMPLIANT, "bad"),
     ]
     out = tmp_path / "report.csv"
     write_csv(rows, out)
@@ -299,3 +328,20 @@ def test_write_csv_roundtrip(tmp_path):
     assert "srv01" in content
     assert "джамми" in content
     assert "майкрософт" in content
+    assert "IT-группа A" in content
+
+
+def test_write_html_creates_file(tmp_path):
+    rows = [
+        ReportRow("srv01", "ubuntu 22.04 lts|...", "IT-группа A / Ivanov.AA", "HOST", Status.OK, "OK: Ubuntu 22.04 LTS"),
+        ReportRow("vm01",  "майкрософт windows 10|22h2", "IT-группа B", "VM", Status.NON_COMPLIANT, "NON_COMPLIANT: Windows 10"),
+    ]
+    summary = {"total": 2, "OK": 1, "WARNING": 0, "NON_COMPLIANT": 1, "UNKNOWN": 0}
+    out = tmp_path / "report.html"
+    write_html(rows, summary, out)
+    content = out.read_text(encoding="utf-8")
+    assert "srv01" in content
+    assert "IT-группа A" in content
+    assert "Ivanov.AA" in content
+    assert "NON_COMPLIANT" in content
+    assert "<table" in content
