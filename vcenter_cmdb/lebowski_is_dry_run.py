@@ -161,7 +161,8 @@ def main():
             components_list.append({
                 "component_id": srv_id,
                 "name": srv_name.lower(),
-                "IS_name": instance_name,
+                "IS_name": sub_name,
+                "instance_name": instance_name,
                 "deployment_target": srv_name.lower(),
                 "owner": srv_owner,
                 "admin": srv_admin,
@@ -182,12 +183,12 @@ def main():
 
     # ── IS_COMPONENT ─────────────────────────────────────────────────
     print_section(f"КЕ: IS_COMPONENT  ({len(components_list)} записей)")
-    print(f"  {'component_id':<38} {'name':<35} {'IS_name':<40} {'role':<12} {'owner':<30} admin")
-    print(f"  {'-'*38} {'-'*35} {'-'*40} {'-'*12} {'-'*30} {'-'*25}")
+    print(f"  {'component_id':<38} {'name':<35} {'IS_name':<35} {'instance_name':<50} {'role':<12} {'owner':<30} admin")
+    print(f"  {'-'*38} {'-'*35} {'-'*35} {'-'*50} {'-'*12} {'-'*30} {'-'*25}")
     for r in components_list:
         print(
-            f"  {r['component_id']:<38} {r['name'][:34]:<35} {r['IS_name'][:39]:<40} "
-            f"{r['role']:<12} {r['owner'][:29]:<30} {r['admin']}"
+            f"  {r['component_id']:<38} {r['name'][:34]:<35} {r['IS_name'][:34]:<35} "
+            f"{r['instance_name'][:49]:<50} {r['role']:<12} {r['owner'][:29]:<30} {r['admin']}"
         )
 
     # ── IS_INSTANCE ──────────────────────────────────────────────────

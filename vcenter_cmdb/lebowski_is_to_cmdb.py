@@ -174,7 +174,8 @@ def collect_and_transform(**context):
             components_list.append({
                 "component_id": srv_id,
                 "name": srv_name.lower(),
-                "IS_name": instance_name,
+                "IS_name": sub_name,
+                "instance_name": instance_name,
                 "deployment_target": srv_name.lower(),
                 "owner": srv_owner,
                 "admin": srv_admin,
