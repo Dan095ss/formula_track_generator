@@ -160,13 +160,14 @@ def main():
             srv_admin = (detail.get("team") or "").strip() or sub_team
 
             loc = location_prefix(srv_name)
-            env = parse_env(srv_name)
-            instance_name = f"{sub_name} | {loc}"
-            key = (sub_name, loc)
-            if key not in instances_map:
-                instances_map[key] = {"name": instance_name, "IS_name": sub_name, "location": loc, "environment": env}
-            elif not instances_map[key]["environment"] and env:
-                instances_map[key]["environment"] = env
+            if loc in _PREFIX_TO_MRU.values():
+                env = parse_env(srv_name)
+                instance_name = f"{sub_name} | {loc}"
+                key = (sub_name, loc)
+                if key not in instances_map:
+                    instances_map[key] = {"name": instance_name, "IS_name": sub_name, "location": loc, "environment": env}
+                elif not instances_map[key]["environment"] and env:
+                    instances_map[key]["environment"] = env
 
             components_list.append({
                 "component_id": srv_id,

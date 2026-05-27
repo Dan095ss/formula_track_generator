@@ -168,18 +168,19 @@ def collect_and_transform(**context):
             srv_admin = (detail.get("team") or "").strip() or sub_team
 
             location = _location_prefix(srv_name)
-            environment = _parse_env(srv_name)
-            instance_name = f"{sub_name} | {location}"
-            key = (sub_name, location)
-            if key not in instances_map:
-                instances_map[key] = {
-                    "name": instance_name,
-                    "IS_name": sub_name,
-                    "location": location,
-                    "environment": environment,
-                }
-            elif not instances_map[key]["environment"] and environment:
-                instances_map[key]["environment"] = environment
+            if location in _PREFIX_TO_MRU.values():
+                environment = _parse_env(srv_name)
+                instance_name = f"{sub_name} | {location}"
+                key = (sub_name, location)
+                if key not in instances_map:
+                    instances_map[key] = {
+                        "name": instance_name,
+                        "IS_name": sub_name,
+                        "location": location,
+                        "environment": environment,
+                    }
+                elif not instances_map[key]["environment"] and environment:
+                    instances_map[key]["environment"] = environment
 
             components_list.append({
                 "component_id": srv_id,
