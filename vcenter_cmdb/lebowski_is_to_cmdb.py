@@ -9,7 +9,6 @@ IS_INSTANCE ← группировка серверов по (IS_name, location_
 import re
 import logging
 import urllib3
-from collections import defaultdict
 
 import requests
 from requests.auth import HTTPBasicAuth
