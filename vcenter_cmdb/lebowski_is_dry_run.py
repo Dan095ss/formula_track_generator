@@ -74,8 +74,18 @@ def parse_env(name):
     return ''
 
 
+_PREFIX_TO_MRU = {
+    "ADM":  "MRU_ADM",
+    "DV":   "MRU_DV",
+    "MOW":  "MRU_MSK",
+    "MOW2": "MRU_MSK2",
+    "URAL": "MRU_URAL",
+}
+
+
 def location_prefix(name):
-    return name.split('-')[0].upper() if name else ''
+    prefix = name.split('-')[0].upper() if name else ''
+    return _PREFIX_TO_MRU.get(prefix, prefix)
 
 
 def print_section(title):
