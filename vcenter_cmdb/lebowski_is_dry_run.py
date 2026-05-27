@@ -181,11 +181,11 @@ def main():
 
     # ── IS_COMPONENT ─────────────────────────────────────────────────
     print_section(f"КЕ: IS_COMPONENT  ({len(components_list)} записей)")
-    print(f"  {'name':<35} {'IS_name':<40} {'role':<12} {'owner':<30} admin")
-    print(f"  {'-'*35} {'-'*40} {'-'*12} {'-'*30} {'-'*25}")
+    print(f"  {'component_id':<38} {'name':<35} {'IS_name':<40} {'role':<12} {'owner':<30} admin")
+    print(f"  {'-'*38} {'-'*35} {'-'*40} {'-'*12} {'-'*30} {'-'*25}")
     for r in components_list:
         print(
-            f"  {r['name'][:34]:<35} {r['IS_name'][:39]:<40} "
+            f"  {r['component_id']:<38} {r['name'][:34]:<35} {r['IS_name'][:39]:<40} "
             f"{r['role']:<12} {r['owner'][:29]:<30} {r['admin']}"
         )
 
