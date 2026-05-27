@@ -160,9 +160,9 @@ def collect_and_transform(**context):
 
             components_list.append({
                 "component_id": srv_id,
-                "name": srv_name,
+                "name": srv_name.lower(),
                 "IS_name": sub_name,
-                "deployment_target": srv_name,
+                "deployment_target": srv_name.lower(),
                 "owner": srv_owner,
                 "admin": srv_admin,
                 "role": _parse_role(srv_name),
