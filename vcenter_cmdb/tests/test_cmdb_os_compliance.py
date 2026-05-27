@@ -27,44 +27,39 @@ from vcenter_cmdb.cmdb_os_compliance import (
 )
 
 
+
 # ============================================================
 # 1. Config / load_config
 # ============================================================
 
-def test_load_config_from_env(monkeypatch, tmp_path):
+def test_load_config_from_env(monkeypatch):
     monkeypatch.setenv("CMDB_URL", "https://cmdb.example.com")
-    monkeypatch.setenv("CMDB_USER", "alice")
-    monkeypatch.setenv("CMDB_PASSWORD", "secret")
+    monkeypatch.setenv("CMDB_TOKEN", "mytoken123")
     cfg = load_config([])
     assert cfg.cmdb_url == "https://cmdb.example.com"
-    assert cfg.username == "alice"
-    assert cfg.password == "secret"
+    assert cfg.token == "mytoken123"
     assert cfg.page_size == 500
     assert cfg.verify_ssl is False
 
 
 def test_load_config_cli_overrides_env(monkeypatch):
     monkeypatch.setenv("CMDB_URL", "https://cmdb.example.com")
-    monkeypatch.setenv("CMDB_USER", "alice")
-    monkeypatch.setenv("CMDB_PASSWORD", "secret")
-    cfg = load_config(["--user", "bob", "--password", "pw2", "--page-size", "100"])
-    assert cfg.username == "bob"
-    assert cfg.password == "pw2"
+    monkeypatch.setenv("CMDB_TOKEN", "envtoken")
+    cfg = load_config(["--token", "clitoken", "--page-size", "100"])
+    assert cfg.token == "clitoken"
     assert cfg.page_size == 100
 
 
 def test_load_config_missing_url_raises(monkeypatch):
     monkeypatch.delenv("CMDB_URL", raising=False)
-    monkeypatch.setenv("CMDB_USER", "alice")
-    monkeypatch.setenv("CMDB_PASSWORD", "secret")
+    monkeypatch.setenv("CMDB_TOKEN", "tok")
     with pytest.raises(SystemExit):
         load_config([])
 
 
-def test_load_config_missing_user_raises(monkeypatch):
+def test_load_config_missing_token_raises(monkeypatch):
     monkeypatch.setenv("CMDB_URL", "https://cmdb.example.com")
-    monkeypatch.delenv("CMDB_USER", raising=False)
-    monkeypatch.setenv("CMDB_PASSWORD", "secret")
+    monkeypatch.delenv("CMDB_TOKEN", raising=False)
     with pytest.raises(SystemExit):
         load_config([])
 

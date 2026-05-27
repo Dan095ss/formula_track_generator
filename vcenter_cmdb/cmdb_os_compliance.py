@@ -6,9 +6,9 @@ matches both types.
 
 Usage:
     python cmdb_os_compliance.py --url https://cmdb.example.com \
-        --user alice --password secret
+        --token <api_token>
 
-Env vars (fallback): CMDB_URL, CMDB_USER, CMDB_PASSWORD
+Env vars (fallback): CMDB_URL, CMDB_TOKEN
 """
 
 import argparse
@@ -57,8 +57,7 @@ class CmdbHTTPError(CmdbError):
 @dataclass(frozen=True)
 class Config:
     cmdb_url: str
-    username: str
-    password: str
+    token: str
     page_size: int = 500
     output_path: Path = field(default_factory=lambda: Path(f"os_compliance_report_{date.today():%Y%m%d}.csv"))
     verify_ssl: bool = False
@@ -70,22 +69,20 @@ def load_config(argv: list[str] | None = None) -> Config:
 
     parser = argparse.ArgumentParser(description="CMDB OS Compliance Checker")
     parser.add_argument("--url", default=os.environ.get("CMDB_URL"), help="CMDB base URL")
-    parser.add_argument("--user", default=os.environ.get("CMDB_USER"), help="CMDB username")
-    parser.add_argument("--password", default=os.environ.get("CMDB_PASSWORD"), help="CMDB password")
+    parser.add_argument("--token", default=os.environ.get("CMDB_TOKEN"), help="CMDB API token")
     parser.add_argument("--page-size", type=int, default=500)
     parser.add_argument("--output", type=Path, default=None)
 
     args = parser.parse_args(argv if argv is not None else sys.argv[1:])
 
-    missing = [name for name, val in [("--url/CMDB_URL", args.url), ("--user/CMDB_USER", args.user), ("--password/CMDB_PASSWORD", args.password)] if not val]
+    missing = [name for name, val in [("--url/CMDB_URL", args.url), ("--token/CMDB_TOKEN", args.token)] if not val]
     if missing:
         parser.error(f"Required but not provided: {', '.join(missing)}")
 
     output = args.output or Path(f"os_compliance_report_{date.today():%Y%m%d}.csv")
     return Config(
         cmdb_url=args.url.rstrip("/"),
-        username=args.user,
-        password=args.password,
+        token=args.token,
         page_size=args.page_size,
         output_path=output,
     )
@@ -405,21 +402,19 @@ class CmdbClient:
         self._cfg = config
         self._session = requests.Session()
         self._session.verify = config.verify_ssl
+        self._session.headers["Authorization"] = f"Bearer {config.token}"
         self._base = config.cmdb_url + "/api/v1"
 
-    def login(self) -> None:
-        resp = self._session.post(
-            f"{self._base}/auth/login",
-            data={"username": self._cfg.username, "password": self._cfg.password},
-            timeout=self._cfg.timeout,
-        )
-        if resp.status_code != 200:
-            raise CmdbAuthError(f"Login failed: HTTP {resp.status_code}")
-        if "cmdb::access_token" not in self._session.cookies and "access_token" not in resp.text:
-            # Some versions set cookies differently — check both
-            if not any("token" in k.lower() for k in self._session.cookies):
-                raise CmdbAuthError("Login succeeded HTTP-wise but no auth cookie received")
-        log.info("Authenticated to CMDB as %s", self._cfg.username)
+    def check_auth(self) -> None:
+        """Verify the token works by hitting a lightweight endpoint."""
+        resp = self._session.get(f"{self._base}/user/me", timeout=self._cfg.timeout)
+        if resp.status_code == 401:
+            raise CmdbAuthError("Token rejected (401 Unauthorized)")
+        if resp.status_code == 403:
+            raise CmdbAuthError("Token valid but insufficient permissions (403 Forbidden)")
+        if resp.status_code not in (200, 404):
+            raise CmdbHTTPError(resp.status_code, resp.text)
+        log.info("CMDB token accepted")
 
     def get_ci_type_uuid(self, name: str) -> str:
         resp = self._session.get(
@@ -478,7 +473,7 @@ def main(argv: list[str] | None = None) -> int:
     setup_logging()
     client = CmdbClient(config)
     try:
-        client.login()
+        client.check_auth()
         host_uuid = client.get_ci_type_uuid("HOST")
         vm_uuid   = client.get_ci_type_uuid("VM")
         inventory = build_inventory(client.iter_cis(host_uuid), client.iter_cis(vm_uuid))
