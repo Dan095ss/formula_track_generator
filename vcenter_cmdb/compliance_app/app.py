@@ -212,7 +212,11 @@ def load_data() -> None:
     print("Loading branches…")
     branch_uuid = client.get_ci_type_uuid("branches")
     bu, bn, bname = build_branch_maps(client.iter_cis(branch_uuid))
-    print(f"  {len(bu)} branches loaded")
+    print(f"  {len(bu)} branches loaded, {len(bname)} names indexed")
+
+    print("Building host→branch map from graph refs…")
+    hbm = client.build_host_branch_map(bu)
+    print(f"  host_branch_map: {len(hbm)} entries")
 
     host_uuid = client.get_ci_type_uuid("HOST")
     vm_uuid   = client.get_ci_type_uuid("VM")
@@ -221,7 +225,7 @@ def load_data() -> None:
     inventory = build_inventory(
         client.iter_cis(host_uuid),
         client.iter_cis(vm_uuid),
-        bu, bn, bname,
+        bu, bn, bname, hbm,
     )
     print(f"  {len(inventory)} unique KEs")
 
