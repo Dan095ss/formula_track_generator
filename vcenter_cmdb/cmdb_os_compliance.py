@@ -853,9 +853,21 @@ def main(argv: list[str] | None = None) -> int:
     client = CmdbClient(config)
     try:
         client.check_auth()
-        host_uuid = client.get_ci_type_uuid("HOST")
-        vm_uuid   = client.get_ci_type_uuid("VM")
-        inventory = build_inventory(client.iter_cis(host_uuid), client.iter_cis(vm_uuid))
+        host_uuid   = client.get_ci_type_uuid("HOST")
+        vm_uuid     = client.get_ci_type_uuid("VM")
+        branch_uuid = client.get_ci_type_uuid("branches")
+        log.info("Pre-loading branches for division lookup…")
+        branches_by_uuid, branches_by_number = build_branch_maps(
+            client.iter_cis(branch_uuid)
+        )
+        log.info("Loaded %d branch UUIDs, %d branch numbers",
+                 len(branches_by_uuid), len(branches_by_number))
+        inventory = build_inventory(
+            client.iter_cis(host_uuid),
+            client.iter_cis(vm_uuid),
+            branches_by_uuid,
+            branches_by_number,
+        )
         rows = build_report(inventory)
         summary = summarize(rows)
         print_console_table(rows, summary)
