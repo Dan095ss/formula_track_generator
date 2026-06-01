@@ -301,40 +301,48 @@ def resolve_division(
     4. CI attr ref.uuid in branches_by_uuid (fallback, rarely populated)
     Returns None if division cannot be determined.
     """
+    sh = shorthost_of(ci) or "?"
+
     # 1. Direct ref map from /ref/full/
     if host_branch_map:
         ci_uuid = ci.get("uuid", "")
         if ci_uuid:
             hit = host_branch_map.get(ci_uuid)
             if hit:
-                return hit
-
-    # 2. Owner field → branch name (format: "Филиал / Person.AA")
-    if branches_by_name:
-        owner_raw = extract_attrs(ci).get("owner", "").strip()
-        branch_part = owner_raw.split(" / ")[0].strip().lower()
-        if branch_part:
-            hit = branches_by_name.get(branch_part)
-            if hit:
+                log.debug("[div] %s  M1-ref -> %s", sh, hit)
                 return hit
             else:
-                log.debug("owner-name miss: %r not in by_name (sh=%s)",
-                          branch_part, shorthost_of(ci))
+                log.debug("[div] %s  M1-ref MISS uuid=%s", sh, ci_uuid)
+
+    # 2. Owner field → branch name (format: "Филиал / Person.AA")
+    owner_raw = extract_attrs(ci).get("owner", "").strip()
+    branch_part = owner_raw.split(" / ")[0].strip().lower()
+    if branches_by_name and branch_part:
+        hit = branches_by_name.get(branch_part)
+        if hit:
+            log.debug("[div] %s  M2-owner %r -> %s", sh, branch_part, hit)
+            return hit
+        else:
+            log.debug("[div] %s  M2-owner MISS %r", sh, branch_part)
 
     # 3. Numeric code in shorthost → branches.number
-    sh = shorthost_of(ci) or ""
     code = branch_number_from_host(sh)
     if code:
         hit = branches_by_number.get(code)
         if hit:
+            log.debug("[div] %s  M3-num %s -> %s", sh, code, hit)
             return hit
+        else:
+            log.debug("[div] %s  M3-num MISS code=%s", sh, code)
 
     # 4. CI attr ref.uuid (rarely populated in this CMDB)
     for ref_uuid in ref_uuids_of(ci):
         hit = branches_by_uuid.get(ref_uuid)
         if hit:
+            log.debug("[div] %s  M4-attrref %s -> %s", sh, ref_uuid, hit)
             return hit
 
+    log.debug("[div] %s  ALL MISS (owner=%r, code=%s)", sh, branch_part, code)
     return None
 
 

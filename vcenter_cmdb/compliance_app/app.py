@@ -800,7 +800,7 @@ fetchStats();fetchDivisions();fetchData();
 if __name__ == "__main__":
     import sys
     logging.basicConfig(
-        level=logging.INFO,
+        level=logging.DEBUG,
         format="%(asctime)s %(levelname)s: %(message)s",
         datefmt="%H:%M:%S",
     )
