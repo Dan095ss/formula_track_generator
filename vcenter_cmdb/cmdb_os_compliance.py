@@ -680,8 +680,9 @@ _HTML_TEMPLATE = """\
   <div class="footer">Регламент допустимых ОС от 13.05.2026 &nbsp;·&nbsp; CMDB OS Compliance Checker</div>
 </div>
 
+<script id="__data__" type="application/json">{data_json}</script>
 <script>
-var DATA = {data_json};
+var DATA = JSON.parse(document.getElementById('__data__').textContent);
 
 var ROW_CLASS = {{
   'OK': 'row-ok', 'WARNING': 'row-warning',
@@ -1001,7 +1002,7 @@ def write_html(rows: list[ReportRow], summary: dict[str, int], path: Path) -> No
         warning=summary["WARNING"],
         fail=summary["NON_COMPLIANT"],
         unknown=summary["UNKNOWN"],
-        data_json=_json.dumps(data, ensure_ascii=False),
+        data_json=_json.dumps(data, ensure_ascii=False).replace("</", "<\\/"),
     )
     path.write_text(content, encoding="utf-8")
 
