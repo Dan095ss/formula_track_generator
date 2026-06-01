@@ -70,7 +70,7 @@ def load_config(argv: list[str] | None = None) -> Config:
     import os
 
     parser = argparse.ArgumentParser(description="CMDB OS Compliance Checker")
-    parser.add_argument("--url", default=os.environ.get("CMDB_URL"), help="CMDB base URL")
+    parser.add_argument("--url", default=os.environ.get("CMDB_URL", "https://cmdb.dns-shop.ru"), help="CMDB base URL")
     parser.add_argument("--token", default=os.environ.get("CMDB_TOKEN"), help="CMDB API token")
     parser.add_argument("--page-size", type=int, default=500)
     parser.add_argument("--output", type=Path, default=None, help="CSV output path")

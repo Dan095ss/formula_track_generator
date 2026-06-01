@@ -56,11 +56,11 @@ def test_load_config_cli_overrides_env(monkeypatch):
     assert cfg.page_size == 100
 
 
-def test_load_config_missing_url_raises(monkeypatch):
+def test_load_config_default_url(monkeypatch):
     monkeypatch.delenv("CMDB_URL", raising=False)
     monkeypatch.setenv("CMDB_TOKEN", "tok")
-    with pytest.raises(SystemExit):
-        load_config([])
+    cfg = load_config([])
+    assert cfg.cmdb_url == "https://cmdb.dns-shop.ru"
 
 
 def test_load_config_missing_token_raises(monkeypatch):
