@@ -90,6 +90,78 @@ def load_snapshot(snap_id: str) -> dict:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+def import_csv_snapshot(csv_bytes: bytes, filename: str = "") -> str:
+    """Parse a compliance CSV file and save as a snapshot with source='csv'."""
+    import re as _re
+    text   = csv_bytes.decode("utf-8-sig")
+    reader = csv.DictReader(text.splitlines())
+    hosts  = {}
+    for row in reader:
+        sh = (row.get("shorthost") or "").strip()
+        if not sh:
+            continue
+        hosts[sh] = {
+            "status":   (row.get("status")   or "").strip(),
+            "os_name":  (row.get("os_name")  or "").strip(),
+            "owner":    (row.get("owner")    or "").strip(),
+            "division": (row.get("division") or "").strip(),
+            "family":   (row.get("family")   or "").strip(),
+            "reason":   (row.get("reason")   or "").strip(),
+        }
+    # Extract date from filename (pattern YYYYMMDD)
+    ts_str = None
+    m = _re.search(r"(\d{8})", filename)
+    if m:
+        try:
+            ts_str = datetime.strptime(m.group(1), "%Y%m%d").isoformat(timespec="seconds")
+        except ValueError:
+            pass
+    if ts_str is None:
+        ts_str = datetime.now().isoformat(timespec="seconds")
+
+    snap_id = ts_str.replace("-", "").replace("T", "_").replace(":", "")[:15]
+    counts: dict[str, int] = {"total": len(hosts), "OK": 0, "WARNING": 0, "NON_COMPLIANT": 0, "UNKNOWN": 0}
+    for h in hosts.values():
+        s = h["status"]
+        counts[s] = counts.get(s, 0) + 1
+
+    SNAPSHOTS_DIR.mkdir(exist_ok=True)
+    payload = {"id": snap_id, "timestamp": ts_str, "source": "csv",
+               "summary": counts, "hosts": hosts}
+    (SNAPSHOTS_DIR / f"{snap_id}.json").write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+    return snap_id
+
+
+def compare_snapshots(snap_a: dict, snap_b: dict) -> dict:
+    """Diff snap_b vs snap_a. snap_b assumed newer. Returns {new, removed, changed}."""
+    hosts_a: dict = snap_a.get("hosts", {})
+    hosts_b: dict = snap_b.get("hosts", {})
+    keys_a, keys_b = set(hosts_a), set(hosts_b)
+
+    new_hosts = [{"shorthost": h, **hosts_b[h]} for h in sorted(keys_b - keys_a)]
+    removed   = [{"shorthost": h, "status_from": hosts_a[h]["status"], **hosts_a[h]}
+                 for h in sorted(keys_a - keys_b)]
+    changed   = []
+    for h in sorted(keys_a & keys_b):
+        sa, sb = hosts_a[h]["status"], hosts_b[h]["status"]
+        if sa == sb:
+            continue
+        direction = "improved" if _STATUS_PRIO.get(sb, 2) > _STATUS_PRIO.get(sa, 2) else "worsened"
+        changed.append({
+            "shorthost":   h,
+            "status_from": sa,
+            "status_to":   sb,
+            "direction":   direction,
+            "os_name":     hosts_b[h].get("os_name", ""),
+            "owner":       hosts_b[h].get("owner", ""),
+            "division":    hosts_b[h].get("division", ""),
+            "reason_to":   hosts_b[h].get("reason", ""),
+        })
+    return {"new": new_hosts, "removed": removed, "changed": changed}
+
+
 # ── Helpers ──────────────────────────────────────────────────
 
 def _filter_rows(args: dict) -> list[ReportRow]:
@@ -160,6 +232,7 @@ def load_data() -> None:
     nc = _summary["NON_COMPLIANT"]
     ok = _summary["OK"]
     print(f"Done — {len(_rows)} KEs | NON_COMPLIANT: {nc} | OK: {ok}")
+    save_snapshot(_rows, source="cmdb")
 
 
 # ── Routes ───────────────────────────────────────────────────

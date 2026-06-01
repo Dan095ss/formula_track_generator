@@ -182,3 +182,64 @@ def test_load_snapshot_has_hosts(snap_dir):
     data = app_module.load_snapshot(snap_id)
     assert "hosts" in data
     assert data["hosts"]["srv01"]["status"] == "OK"
+
+
+# ============================================================
+# CSV import + compare
+# ============================================================
+
+CSV_CONTENT = (
+    "shorthost,os_name,owner,division,ke_type,family,status,reason\r\n"
+    "srv01,ubuntu 22.04,IT / A,04. дів. Урал,HOST,linux,OK,OK: Ubuntu\r\n"
+    "vm01,windows 10|22h2,IT / B,05. дів. Юг,VM,windows_client,NON_COMPLIANT,NON_COMPLIANT: Win10\r\n"
+)
+
+
+def test_import_csv_snapshot(snap_dir):
+    snap_id = app_module.import_csv_snapshot(
+        CSV_CONTENT.encode("utf-8-sig"), "os_compliance_report_20260527.csv"
+    )
+    data = app_module.load_snapshot(snap_id)
+    assert data["source"] == "csv"
+    assert "srv01" in data["hosts"]
+    assert data["hosts"]["vm01"]["status"] == "NON_COMPLIANT"
+    assert data["summary"]["total"] == 2
+
+
+def test_import_csv_extracts_date_from_filename(snap_dir):
+    snap_id = app_module.import_csv_snapshot(
+        CSV_CONTENT.encode("utf-8"), "os_compliance_report_20260527.csv"
+    )
+    data = app_module.load_snapshot(snap_id)
+    assert "2026-05-27" in data["timestamp"]
+
+
+def test_compare_snapshots_detects_worsened():
+    snap_a = {
+        "id": "a", "timestamp": "2026-05-27T00:00:00",
+        "hosts": {"srv01": {"status": "OK", "os_name": "u22", "owner": "", "division": "", "reason": ""}},
+    }
+    snap_b = {
+        "id": "b", "timestamp": "2026-06-01T00:00:00",
+        "hosts": {"srv01": {"status": "NON_COMPLIANT", "os_name": "u22", "owner": "", "division": "", "reason": "bad"}},
+    }
+    diff = app_module.compare_snapshots(snap_a, snap_b)
+    assert len(diff["changed"]) == 1
+    assert diff["changed"][0]["direction"] == "worsened"
+    assert diff["changed"][0]["status_from"] == "OK"
+    assert diff["changed"][0]["status_to"] == "NON_COMPLIANT"
+
+
+def test_compare_snapshots_detects_improved():
+    snap_a = {"id":"a","timestamp":"","hosts":{"h1":{"status":"NON_COMPLIANT","os_name":"","owner":"","division":"","reason":""}}}
+    snap_b = {"id":"b","timestamp":"","hosts":{"h1":{"status":"OK","os_name":"","owner":"","division":"","reason":""}}}
+    diff = app_module.compare_snapshots(snap_a, snap_b)
+    assert diff["changed"][0]["direction"] == "improved"
+
+
+def test_compare_snapshots_detects_new_and_removed():
+    snap_a = {"id":"a","timestamp":"","hosts":{"old":{"status":"OK","os_name":"","owner":"","division":"","reason":""}}}
+    snap_b = {"id":"b","timestamp":"","hosts":{"new_host":{"status":"OK","os_name":"","owner":"","division":"","reason":""}}}
+    diff = app_module.compare_snapshots(snap_a, snap_b)
+    assert any(h["shorthost"] == "new_host" for h in diff["new"])
+    assert any(h["shorthost"] == "old"      for h in diff["removed"])
