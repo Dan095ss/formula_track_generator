@@ -121,6 +121,19 @@ _UBUNTU_VER_RE      = re.compile(r"ubuntu\s+(\d+)\.(\d+)", re.IGNORECASE)
 _DEBIAN_VER_RE      = re.compile(r"debian[^\d]*(\d+)")
 _ALMA_VER_RE        = re.compile(r"alma\w*\s*(?:linux\s*)?(\d+)", re.IGNORECASE)
 _RHEL_VER_RE        = re.compile(r"(?:rhel|red\s*hat[^0-9]*)\s*(\d+)", re.IGNORECASE)
+_BRANCH_NUM_RE = re.compile(r'(?i)^[a-z]+-?(\d+)')
+
+
+def branch_number_from_host(shorthost: str) -> str | None:
+    """Extract numeric branch code from shorthost, stripping leading zeros.
+
+    Examples: 'vl1212-kassa' -> '1212', 'irk020-srv' -> '20'.
+    Returns None if no leading-letters+digits pattern found.
+    """
+    m = _BRANCH_NUM_RE.match(shorthost)
+    if not m:
+        return None
+    return str(int(m.group(1)))
 
 
 def _parse_win11_build(text: str) -> tuple[int, int] | None:

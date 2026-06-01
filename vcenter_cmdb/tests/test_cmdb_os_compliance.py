@@ -345,3 +345,28 @@ def test_write_html_creates_file(tmp_path):
     assert "Ivanov.AA" in content
     assert "NON_COMPLIANT" in content
     assert "<table" in content
+
+
+# ============================================================
+# 6. Division resolution helpers
+# ============================================================
+
+from vcenter_cmdb.cmdb_os_compliance import (
+    branch_number_from_host,
+)
+
+
+@pytest.mark.parametrize("shorthost, expected", [
+    ("vl1212-kassa1",    "1212"),
+    ("u1651-sklad3",     "1651"),
+    ("YUG-7760-Admin",   "7760"),
+    ("VS7368-kassa1",    "7368"),
+    ("u2469-mngr1",      "2469"),
+    ("irk020-mngr43",    "20"),     # leading zeros stripped
+    ("yrs141-bender-1",  "141"),
+    ("yug-6264-nout",    "6264"),
+    ("nodigits-host",    None),
+    ("",                 None),
+])
+def test_branch_number_from_host(shorthost, expected):
+    assert branch_number_from_host(shorthost) == expected
