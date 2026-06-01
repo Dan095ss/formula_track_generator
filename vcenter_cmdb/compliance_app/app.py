@@ -806,8 +806,15 @@ if __name__ == "__main__":
         print(f"Ошибка загрузки данных: {e}", file=sys.stderr)
         sys.exit(1)
 
-    port = 5000
-    url  = f"http://localhost:{port}"
+    import socket
+    port     = 5000
+    hostname = socket.gethostname()
+    try:
+        local_ip = socket.gethostbyname(hostname)
+    except Exception:
+        local_ip = "127.0.0.1"
+    url = f"http://localhost:{port}"
     print(f"\nОткрываю браузер → {url}")
+    print(f"Доступен в локальной сети → http://{local_ip}:{port}")
     threading.Timer(1.2, lambda: webbrowser.open(url)).start()
-    app.run(host="127.0.0.1", port=port, debug=False)
+    app.run(host="0.0.0.0", port=port, debug=False)
