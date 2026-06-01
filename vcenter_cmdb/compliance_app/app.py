@@ -19,6 +19,7 @@ from cmdb_os_compliance import (
     CmdbClient,
     ReportRow,
     Status,
+    build_account_division_map,
     build_branch_maps,
     build_inventory,
     build_report,
@@ -218,6 +219,15 @@ def load_data() -> None:
     hbm = client.build_host_branch_map(bu)
     print(f"  host_branch_map: {len(hbm)} entries")
 
+    print("Loading ACCOUNT CIs for sAMAccountName → department lookup…")
+    try:
+        account_uuid = client.get_ci_type_uuid("ACCOUNT")
+        adm = build_account_division_map(client.iter_cis(account_uuid), bname)
+        print(f"  account_division_map: {len(adm)} entries")
+    except Exception as e:
+        log.warning("Could not load ACCOUNT CIs: %s", e)
+        adm = {}
+
     host_uuid = client.get_ci_type_uuid("HOST")
     vm_uuid   = client.get_ci_type_uuid("VM")
 
@@ -225,7 +235,7 @@ def load_data() -> None:
     inventory = build_inventory(
         client.iter_cis(host_uuid),
         client.iter_cis(vm_uuid),
-        bu, bn, bname, hbm,
+        bu, bn, bname, hbm, adm,
     )
     print(f"  {len(inventory)} unique KEs")
 

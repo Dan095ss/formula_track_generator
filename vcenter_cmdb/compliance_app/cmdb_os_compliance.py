@@ -291,20 +291,47 @@ def ref_uuids_of(ci: dict) -> set[str]:
     return result
 
 
+def build_account_division_map(
+    account_cis: Iterable[dict],
+    branches_by_name: dict[str, str],
+) -> dict[str, str]:
+    """Build {sAMAccountName_lower → division} via ACCOUNT.department → branches.
+
+    Each ACCOUNT CI has a sAMAccountName attr and a department attr.
+    department matches a branch name → ter_lvl_2.
+    """
+    result: dict[str, str] = {}
+    for ci in account_cis:
+        attrs = extract_attrs(ci)
+        # sAMAccountName may be stored under different attr names
+        sam = (attrs.get("samaccountname") or attrs.get("sAMAccountName") or
+               attrs.get("login") or "").strip()
+        dept = attrs.get("department", "").strip()
+        if not sam or not dept:
+            continue
+        div = branches_by_name.get(_norm(dept))
+        if div:
+            result[sam.lower()] = div
+    log.info("build_account_division_map: %d entries", len(result))
+    return result
+
+
 def resolve_division(
     ci: dict,
     branches_by_uuid: dict[str, str],
     branches_by_number: dict[str, str],
     branches_by_name: dict[str, str] | None = None,
     host_branch_map: dict[str, str] | None = None,
+    account_division_map: dict[str, str] | None = None,
 ) -> str | None:
     """Determine ter_lvl_2 (division) for a CI.
 
     Priority:
     1. Direct graph ref via /ref/full/ map (host_branch_map) — most reliable
     2. Owner field → branch name lookup (owner = "Филиал / Person")
-    3. Numeric code in shorthost → branches.number
-    4. CI attr ref.uuid in branches_by_uuid (fallback, rarely populated)
+    3. owner_person sAMAccountName → ACCOUNT.department → branch
+    4. Numeric code in shorthost → branches.number
+    5. CI attr ref.uuid in branches_by_uuid (fallback, rarely populated)
     Returns None if division cannot be determined.
     """
     sh = shorthost_of(ci) or "?"
@@ -331,24 +358,39 @@ def resolve_division(
         else:
             log.debug("[div] %s  M2-owner MISS %r", sh, branch_part)
 
-    # 3. Numeric code in shorthost → branches.number
+    # 3. owner_person sAMAccountName → ACCOUNT.department → branch
+    if account_division_map:
+        attrs_ci = extract_attrs(ci)
+        person_raw = (attrs_ci.get("owner_person") or attrs_ci.get("admin_person") or "").strip()
+        # strip @domain suffix: "Fedorenko.PA@PARTNER" → "fedorenko.pa"
+        sam = person_raw.split("@")[0].strip().lower()
+        if sam:
+            hit = account_division_map.get(sam)
+            if hit:
+                log.debug("[div] %s  M3-account sam=%r -> %s", sh, sam, hit)
+                return hit
+            else:
+                log.debug("[div] %s  M3-account MISS sam=%r", sh, sam)
+
+    # 4. Numeric code in shorthost → branches.number
     code = branch_number_from_host(sh)
     if code:
         hit = branches_by_number.get(code)
         if hit:
-            log.debug("[div] %s  M3-num %s -> %s", sh, code, hit)
+            log.debug("[div] %s  M4-num %s -> %s", sh, code, hit)
             return hit
         else:
-            log.debug("[div] %s  M3-num MISS code=%s", sh, code)
+            log.debug("[div] %s  M4-num MISS code=%s", sh, code)
 
-    # 4. CI attr ref.uuid (rarely populated in this CMDB)
+    # 5. CI attr ref.uuid (rarely populated in this CMDB)
     for ref_uuid in ref_uuids_of(ci):
         hit = branches_by_uuid.get(ref_uuid)
         if hit:
-            log.debug("[div] %s  M4-attrref %s -> %s", sh, ref_uuid, hit)
+            log.debug("[div] %s  M5-attrref %s -> %s", sh, ref_uuid, hit)
             return hit
 
-    log.debug("[div] %s  ALL MISS (owner=%r, code=%s)", sh, branch_part, code)
+    log.debug("[div] %s  ALL MISS (owner=%r, sam=%r, code=%s)",
+              sh, branch_part, sam if account_division_map else "n/a", code)
     return None
 
 
@@ -425,12 +467,14 @@ def build_inventory(
     branches_by_number: dict[str, str] | None = None,
     branches_by_name: dict[str, str] | None = None,
     host_branch_map: dict[str, str] | None = None,
+    account_division_map: dict[str, str] | None = None,
 ) -> dict[str, HostRecord]:
     """Build {shorthost: HostRecord}. HOST os_name and owner take priority over VM."""
-    bu    = branches_by_uuid  or {}
-    bn    = branches_by_number or {}
-    bname = branches_by_name  or {}
-    hbm   = host_branch_map   or {}
+    bu    = branches_by_uuid     or {}
+    bn    = branches_by_number   or {}
+    bname = branches_by_name     or {}
+    hbm   = host_branch_map      or {}
+    adm   = account_division_map or {}
     inv: dict[str, HostRecord] = {}
 
     skip_host = 0
@@ -441,7 +485,7 @@ def build_inventory(
             continue
         osn = os_name_of(ci)
         own = owner_of(ci)
-        div = resolve_division(ci, bu, bn, bname, hbm)
+        div = resolve_division(ci, bu, bn, bname, hbm, adm)
         if sh in inv:
             log.warning("Duplicate HOST shorthost %r — keeping first values", sh)
             inv[sh].sources.add("HOST")
@@ -466,7 +510,7 @@ def build_inventory(
             continue
         osn = os_name_of(ci)
         own = owner_of(ci)
-        div = resolve_division(ci, bu, bn, bname, hbm)
+        div = resolve_division(ci, bu, bn, bname, hbm, adm)
         if sh in inv:
             inv[sh].sources.add("VM")
             # HOST values win — do NOT overwrite
