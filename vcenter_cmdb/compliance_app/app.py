@@ -103,3 +103,61 @@ def load_data() -> None:
     nc = _summary["NON_COMPLIANT"]
     ok = _summary["OK"]
     print(f"Done — {len(_rows)} KEs | NON_COMPLIANT: {nc} | OK: {ok}")
+
+
+# ── Routes ───────────────────────────────────────────────────
+
+@app.route("/")
+def index() -> str:
+    return _HTML
+
+
+@app.route("/api/stats")
+def api_stats():
+    return jsonify(_summary)
+
+
+@app.route("/api/divisions")
+def api_divisions():
+    return jsonify({"divisions": _divisions})
+
+
+@app.route("/api/data")
+def api_data():
+    args  = request.args
+    rows  = _filter_rows(args)
+    rows  = _sort_rows(rows, args.get("sort", ""), args.get("dir", "asc"))
+    total = len(rows)
+    size  = min(int(args.get("size", 100)), 500)
+    page  = max(int(args.get("page", 1)), 1)
+    pages = max(1, -(-total // size))
+    start = (page - 1) * size
+    return jsonify({
+        "data":  [_row_to_dict(r) for r in rows[start: start + size]],
+        "total": total,
+        "page":  page,
+        "pages": pages,
+    })
+
+
+@app.route("/api/export")
+def api_export():
+    args  = request.args
+    rows  = _filter_rows(args)
+    rows  = _sort_rows(rows, args.get("sort", ""), args.get("dir", "asc"))
+    buf   = io.StringIO()
+    w     = csv.writer(buf)
+    w.writerow(["shorthost", "os_name", "owner", "division",
+                "ke_type", "family", "status", "reason"])
+    for r in rows:
+        w.writerow([r.shorthost, r.os_name, r.owner, r.division,
+                    r.ke_type, r.family, r.status.value, r.reason])
+    return Response(
+        "﻿" + buf.getvalue(),
+        mimetype="text/csv; charset=utf-8",
+        headers={"Content-Disposition": "attachment; filename=os_compliance_filtered.csv"},
+    )
+
+
+# Placeholder — replaced in Task 4
+_HTML = "<html><body><h1>CMDB OS Compliance</h1></body></html>"

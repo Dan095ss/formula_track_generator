@@ -76,3 +76,67 @@ def test_sort_desc():
 def test_sort_none_returns_unchanged():
     rows = app_module._rows
     assert app_module._sort_rows(rows, "", "asc") is rows
+
+
+# ---- API routes ----
+
+@pytest.fixture
+def client():
+    app_module.app.config["TESTING"] = True
+    with app_module.app.test_client() as c:
+        yield c
+
+
+def test_stats_route(client):
+    r = client.get("/api/stats")
+    assert r.status_code == 200
+    data = r.get_json()
+    assert data["total"] == 4
+    assert data["OK"] == 1
+    assert data["NON_COMPLIANT"] == 2
+
+
+def test_divisions_route(client):
+    r = client.get("/api/divisions")
+    assert r.status_code == 200
+    data = r.get_json()
+    assert "04. дів. Урал" in data["divisions"]
+
+
+def test_data_route_default(client):
+    r = client.get("/api/data")
+    assert r.status_code == 200
+    data = r.get_json()
+    assert data["total"] == 4
+    assert data["page"] == 1
+    assert len(data["data"]) == 4
+
+
+def test_data_route_filter(client):
+    r = client.get("/api/data?status=NON_COMPLIANT")
+    data = r.get_json()
+    assert data["total"] == 2
+    assert all(row["status"] == "NON_COMPLIANT" for row in data["data"])
+
+
+def test_data_route_pagination(client):
+    r = client.get("/api/data?size=2&page=2")
+    data = r.get_json()
+    assert data["page"] == 2
+    assert data["pages"] == 2
+    assert len(data["data"]) == 2
+
+
+def test_export_route(client):
+    r = client.get("/api/export?status=OK")
+    assert r.status_code == 200
+    assert "text/csv" in r.content_type
+    text = r.data.decode("utf-8-sig")
+    assert "shorthost" in text
+    assert "srv01" in text
+
+
+def test_index_route(client):
+    r = client.get("/")
+    assert r.status_code == 200
+    assert b"CMDB" in r.data
