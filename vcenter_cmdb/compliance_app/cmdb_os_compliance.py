@@ -121,19 +121,22 @@ _UBUNTU_VER_RE      = re.compile(r"ubuntu\s+(\d+)\.(\d+)", re.IGNORECASE)
 _DEBIAN_VER_RE      = re.compile(r"debian[^\d]*(\d+)")
 _ALMA_VER_RE        = re.compile(r"alma\w*\s*(?:linux\s*)?(\d+)", re.IGNORECASE)
 _RHEL_VER_RE        = re.compile(r"(?:rhel|red\s*hat[^0-9]*)\s*(\d+)", re.IGNORECASE)
-_BRANCH_NUM_RE = re.compile(r'(?i)^[a-z]+-?(\d+)')
+_BRANCH_NUM_RE = re.compile(r'(?i)(?:^[a-z]+-?(\d+)|^(\d+)-)')
 
 
 def branch_number_from_host(shorthost: str) -> str | None:
     """Extract numeric branch code from shorthost, stripping leading zeros.
 
-    Examples: 'vl1212-kassa' -> '1212', 'irk020-srv' -> '20'.
-    Returns None if no leading-letters+digits pattern found.
+    Handles two formats:
+      letters-digits:  'vl1212-kassa' -> '1212', 'yug-6264-nout' -> '6264'
+      digits-suffix:   '1580-sklad3'  -> '1580', '1600-unifi'    -> '1600'
+    Returns None if neither pattern matches.
     """
     m = _BRANCH_NUM_RE.match(shorthost)
     if not m:
         return None
-    return str(int(m.group(1)))
+    code = m.group(1) or m.group(2)
+    return str(int(code))
 
 
 def _parse_win11_build(text: str) -> tuple[int, int] | None:
@@ -287,28 +290,48 @@ def resolve_division(
     branches_by_uuid: dict[str, str],
     branches_by_number: dict[str, str],
     branches_by_name: dict[str, str] | None = None,
+    host_branch_map: dict[str, str] | None = None,
 ) -> str | None:
     """Determine ter_lvl_2 (division) for a CI.
 
-    1. Scan CI attrs for any ref.uuid present in branches_by_uuid.
-    2. Extract numeric code from shorthost, look up in branches_by_number.
-    3. Match owner field text against branch names (branches_by_name).
+    Priority:
+    1. Direct graph ref via /ref/full/ map (host_branch_map) — most reliable
+    2. Owner field → branch name lookup (owner = "Филиал / Person")
+    3. Numeric code in shorthost → branches.number
+    4. CI attr ref.uuid in branches_by_uuid (fallback, rarely populated)
     Returns None if division cannot be determined.
     """
-    for ref_uuid in ref_uuids_of(ci):
-        division = branches_by_uuid.get(ref_uuid)
-        if division:
-            return division
+    # 1. Direct ref map from /ref/full/
+    if host_branch_map:
+        ci_uuid = ci.get("uuid", "")
+        if ci_uuid:
+            hit = host_branch_map.get(ci_uuid)
+            if hit:
+                return hit
+
+    # 2. Owner field → branch name (format: "Филиал / Person.AA")
+    if branches_by_name:
+        owner_raw = extract_attrs(ci).get("owner", "").strip()
+        branch_part = owner_raw.split(" / ")[0].strip().lower()
+        if branch_part:
+            hit = branches_by_name.get(branch_part)
+            if hit:
+                return hit
+
+    # 3. Numeric code in shorthost → branches.number
     sh = shorthost_of(ci) or ""
     code = branch_number_from_host(sh)
     if code:
         hit = branches_by_number.get(code)
         if hit:
             return hit
-    if branches_by_name:
-        owner_raw = extract_attrs(ci).get("owner", "").strip().lower()
-        if owner_raw:
-            return branches_by_name.get(owner_raw)
+
+    # 4. CI attr ref.uuid (rarely populated in this CMDB)
+    for ref_uuid in ref_uuids_of(ci):
+        hit = branches_by_uuid.get(ref_uuid)
+        if hit:
+            return hit
+
     return None
 
 
@@ -374,11 +397,13 @@ def build_inventory(
     branches_by_uuid: dict[str, str] | None = None,
     branches_by_number: dict[str, str] | None = None,
     branches_by_name: dict[str, str] | None = None,
+    host_branch_map: dict[str, str] | None = None,
 ) -> dict[str, HostRecord]:
     """Build {shorthost: HostRecord}. HOST os_name and owner take priority over VM."""
-    bu = branches_by_uuid or {}
-    bn = branches_by_number or {}
-    bname = branches_by_name or {}
+    bu    = branches_by_uuid  or {}
+    bn    = branches_by_number or {}
+    bname = branches_by_name  or {}
+    hbm   = host_branch_map   or {}
     inv: dict[str, HostRecord] = {}
 
     skip_host = 0
@@ -389,7 +414,7 @@ def build_inventory(
             continue
         osn = os_name_of(ci)
         own = owner_of(ci)
-        div = resolve_division(ci, bu, bn, bname)
+        div = resolve_division(ci, bu, bn, bname, hbm)
         if sh in inv:
             log.warning("Duplicate HOST shorthost %r — keeping first values", sh)
             inv[sh].sources.add("HOST")
@@ -414,7 +439,7 @@ def build_inventory(
             continue
         osn = os_name_of(ci)
         own = owner_of(ci)
-        div = resolve_division(ci, bu, bn, bname)
+        div = resolve_division(ci, bu, bn, bname, hbm)
         if sh in inv:
             inv[sh].sources.add("VM")
             # HOST values win — do NOT overwrite
@@ -1083,6 +1108,103 @@ class CmdbClient:
                 break
             page += 1
 
+    def iter_refs(self, ref_type_uuid: str) -> Iterator[dict]:
+        """Iterate all Ref objects of a given ref_type, paginated."""
+        page = 1
+        total_pages = None
+        while True:
+            resp = self._session.get(
+                f"{self._base}/ref/full/",
+                params={"type": ref_type_uuid, "page": page, "size": self._cfg.page_size},
+                timeout=self._cfg.timeout,
+            )
+            if resp.status_code != 200:
+                raise CmdbHTTPError(resp.status_code, resp.text)
+            body = resp.json()
+            if total_pages is None:
+                total_pages = body.get("total_pages", 1)
+                log.info("Ref type %s: %d refs, %d pages",
+                         ref_type_uuid, body.get("total_items", "?"), total_pages)
+            yield from body.get("page_data", [])
+            if page >= total_pages:
+                break
+            page += 1
+
+    def build_host_branch_map(
+        self, branches_by_uuid: dict[str, str]
+    ) -> dict[str, str]:
+        """Build {host_ci_uuid → division} by scanning all ref types in CMDB.
+
+        Auto-discovers the ref_type that links HOST/VM CIs to branches CIs
+        by sampling refs and checking if any ref's attr.ref_uuid is a known
+        branch UUID. Returns empty dict if not found or on error.
+        """
+        if not branches_by_uuid:
+            return {}
+        try:
+            resp = self._session.get(
+                f"{self._base}/ref_type/search/", timeout=self._cfg.timeout
+            )
+            if resp.status_code != 200:
+                log.warning("ref_type/search/ failed: %d", resp.status_code)
+                return {}
+            ref_types = resp.json().get("data", [])
+            log.info("Found %d ref types, probing for HOST↔branches links…", len(ref_types))
+        except Exception as e:
+            log.warning("Could not fetch ref_types: %s", e)
+            return {}
+
+        host_branch_map: dict[str, str] = {}
+
+        for rt in ref_types:
+            rt_uuid = rt.get("uuid")
+            if not rt_uuid:
+                continue
+            try:
+                # Sample a small batch to check if this ref type connects branches
+                resp = self._session.get(
+                    f"{self._base}/ref/full/",
+                    params={"type": rt_uuid, "size": 100, "page": 1},
+                    timeout=self._cfg.timeout,
+                )
+                if resp.status_code != 200:
+                    continue
+                sample = resp.json().get("page_data", [])
+            except Exception:
+                continue
+
+            connects_branches = any(
+                attr.get("ref_uuid") in branches_by_uuid
+                for ref in sample
+                for attr in (ref.get("attrs") or [])
+                if attr.get("ref_uuid")
+            )
+            if not connects_branches:
+                continue
+
+            log.info("Ref type %r (uuid=%s) connects to branches — fetching all refs",
+                     rt.get("name"), rt_uuid)
+            try:
+                for ref in self.iter_refs(rt_uuid):
+                    ref_uuids = [
+                        a["ref_uuid"] for a in (ref.get("attrs") or [])
+                        if a.get("ref_uuid")
+                    ]
+                    division = None
+                    host_uuid = None
+                    for ruuid in ref_uuids:
+                        if ruuid in branches_by_uuid:
+                            division = branches_by_uuid[ruuid]
+                        else:
+                            host_uuid = ruuid
+                    if division and host_uuid:
+                        host_branch_map[host_uuid] = division
+            except Exception as e:
+                log.warning("Error fetching refs for type %s: %s", rt_uuid, e)
+            # keep scanning — multiple ref types might connect hosts to branches
+        log.info("host_branch_map built: %d entries", len(host_branch_map))
+        return host_branch_map
+
 
 # ============================================================
 # Entry Point
@@ -1111,12 +1233,15 @@ def main(argv: list[str] | None = None) -> int:
         )
         log.info("Loaded %d branch UUIDs, %d branch numbers, %d branch names",
                  len(branches_by_uuid), len(branches_by_number), len(branches_by_name))
+        log.info("Building host→branch map from graph refs…")
+        host_branch_map = client.build_host_branch_map(branches_by_uuid)
         inventory = build_inventory(
             client.iter_cis(host_uuid),
             client.iter_cis(vm_uuid),
             branches_by_uuid,
             branches_by_number,
             branches_by_name,
+            host_branch_map,
         )
         rows = build_report(inventory)
         summary = summarize(rows)
