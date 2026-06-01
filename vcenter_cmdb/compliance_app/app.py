@@ -337,39 +337,38 @@ _HTML = """<!DOCTYPE html>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: 'Segoe UI', Arial, sans-serif; background: #f0f2f5; color: #1a1a2e; }
   .page { max-width: 1500px; margin: 0 auto; padding: 24px 20px; }
-
   .header { background: linear-gradient(135deg, #1a1a2e 0%, #16213e 60%, #0f3460 100%);
-            color: #fff; border-radius: 12px; padding: 28px 32px; margin-bottom: 24px; }
+            color: #fff; border-radius: 12px; padding: 28px 32px; margin-bottom: 16px; }
   .header h1 { font-size: 22px; font-weight: 700; }
   .header .meta { margin-top: 6px; font-size: 13px; opacity: .7; }
-
-  .cards { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 24px; }
-  .card { flex: 1; min-width: 140px; background: #fff; border-radius: 10px;
-          padding: 18px 20px; box-shadow: 0 1px 4px rgba(0,0,0,.08); cursor: pointer;
-          transition: box-shadow .15s; }
+  .tabs { display: flex; gap: 4px; margin-bottom: 16px; }
+  .tab-btn { padding: 10px 22px; border: none; border-radius: 8px 8px 0 0; background: #e5e7eb;
+             cursor: pointer; font-size: 14px; font-weight: 500; color: #6b7280; transition: all .15s; }
+  .tab-btn.active { background: #fff; color: #0f3460; box-shadow: 0 -2px 0 #0f3460 inset; }
+  .tab-content { display: none; }
+  .tab-content.active { display: block; }
+  .cards { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 16px; }
+  .card { flex: 1; min-width: 140px; background: #fff; border-radius: 10px; padding: 18px 20px;
+          box-shadow: 0 1px 4px rgba(0,0,0,.08); cursor: pointer; transition: box-shadow .15s; }
   .card:hover { box-shadow: 0 4px 12px rgba(0,0,0,.15); }
   .card .num { font-size: 32px; font-weight: 700; line-height: 1; }
   .card .lbl { font-size: 12px; color: #666; margin-top: 4px; text-transform: uppercase; letter-spacing: .6px; }
-  .card.total .num { color: #1a1a2e; }
-  .card.ok    .num { color: #16a34a; }
-  .card.warn  .num { color: #d97706; }
-  .card.fail  .num { color: #dc2626; }
+  .card.total .num { color: #1a1a2e; } .card.ok .num { color: #16a34a; }
+  .card.warn  .num { color: #d97706; } .card.fail .num { color: #dc2626; }
   .card.unk   .num { color: #6b7280; }
-
   .filterbar { background: #fff; border-radius: 10px; padding: 14px 20px;
                margin-bottom: 8px; box-shadow: 0 1px 4px rgba(0,0,0,.08); }
   .filter-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 8px; }
   .filter-row:last-child { margin-bottom: 0; }
   .filter-label { font-size: 11px; font-weight: 600; color: #6b7280;
-                  text-transform: uppercase; letter-spacing: .5px; white-space: nowrap; min-width: 60px; }
+                  text-transform: uppercase; white-space: nowrap; min-width: 60px; }
   .filter-btn { padding: 7px 14px; border: 1px solid #d1d5db; border-radius: 6px;
-                background: #fff; cursor: pointer; font-size: 13px; font-weight: 500;
-                transition: all .15s; white-space: nowrap; }
+                background: #fff; cursor: pointer; font-size: 13px; font-weight: 500; transition: all .15s; }
   .filter-btn:hover { background: #f3f4f6; }
   .filter-btn.active { background: #0f3460; color: #fff; border-color: #0f3460; }
-  .filter-btn.fam-ws.active  { background: #7c3aed; border-color: #7c3aed; }
-  .filter-btn.fam-wc.active  { background: #2563eb; border-color: #2563eb; }
-  .filter-btn.fam-lx.active  { background: #059669; border-color: #059669; }
+  .filter-btn.fam-ws.active { background: #7c3aed; border-color: #7c3aed; }
+  .filter-btn.fam-wc.active { background: #2563eb; border-color: #2563eb; }
+  .filter-btn.fam-lx.active { background: #059669; border-color: #059669; }
   .filter-btn.fam-unk.active { background: #6b7280; border-color: #6b7280; }
   .sel { padding: 7px 10px; border: 1px solid #d1d5db; border-radius: 6px;
          font-size: 13px; cursor: pointer; background: #fff; max-width: 300px; }
@@ -377,54 +376,75 @@ _HTML = """<!DOCTYPE html>
                                   border: 1px solid #d1d5db; border-radius: 6px;
                                   font-size: 14px; outline: none; }
   .filterbar input[type=text]:focus { border-color: #0f3460; box-shadow: 0 0 0 3px rgba(15,52,96,.12); }
-  .export-btn { padding: 7px 16px; border: 1px solid #0f3460; border-radius: 6px;
+  .export-btn, .action-btn { padding: 7px 16px; border: 1px solid #0f3460; border-radius: 6px;
                 background: #0f3460; color: #fff; cursor: pointer; font-size: 13px;
                 font-weight: 500; white-space: nowrap; transition: background .15s; }
-  .export-btn:hover { background: #16213e; }
-
+  .export-btn:hover, .action-btn:hover { background: #16213e; }
+  .action-btn.secondary { background: #fff; color: #0f3460; }
+  .action-btn.secondary:hover { background: #f0f2f5; }
   .table-wrap { background: #fff; border-radius: 10px; overflow: hidden;
                 box-shadow: 0 1px 4px rgba(0,0,0,.08); }
   table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
   thead th { background: #1a1a2e; color: #fff; padding: 12px 14px; text-align: left;
-             font-weight: 600; font-size: 12px; letter-spacing: .5px;
-             text-transform: uppercase; white-space: nowrap; cursor: pointer; user-select: none; }
+             font-weight: 600; font-size: 12px; text-transform: uppercase; white-space: nowrap;
+             cursor: pointer; user-select: none; }
   thead th:hover { background: #16213e; }
-  thead th.sort-asc::after  { content: ' ▲'; }
-  thead th.sort-desc::after { content: ' ▼'; }
+  thead th.sort-asc::after { content: ' \u25b2'; } thead th.sort-desc::after { content: ' \u25bc'; }
   tbody tr { border-bottom: 1px solid #f0f0f0; transition: background .1s; }
   tbody tr:last-child { border-bottom: none; }
   td { padding: 10px 14px; vertical-align: top; }
-  td.host { font-family: 'Consolas', monospace; font-size: 13px; font-weight: 600; color: #0f3460; }
-  td.os   { color: #374151; }
-  td.own  { color: #4b5563; font-size: 13px; }
-  td.div  { color: #6b7280; font-size: 12px; }
-  td.ke   { font-size: 12px; color: #6b7280; white-space: nowrap; }
-  td.fam  { font-size: 11px; color: #9ca3af; white-space: nowrap; }
-  td.reason { font-size: 12px; color: #6b7280; }
+  td.host { font-family: Consolas,monospace; font-size: 13px; font-weight: 600; color: #0f3460; }
+  td.os { color: #374151; } td.own { color: #4b5563; font-size: 13px; }
+  td.div { font-size: 12px; color: #6b7280; } td.ke { font-size: 12px; color: #6b7280; white-space: nowrap; }
+  td.fam { font-size: 11px; color: #9ca3af; white-space: nowrap; } td.reason { font-size: 12px; color: #6b7280; }
   .row-fail    { background: #fff5f5; } .row-fail:hover    { background: #fee2e2; }
   .row-warning { background: #fffbeb; } .row-warning:hover { background: #fef3c7; }
   .row-ok      { background: #f0fdf4; } .row-ok:hover      { background: #dcfce7; }
   .row-unknown { background: #f9fafb; } .row-unknown:hover { background: #f3f4f6; }
   .badge { display: inline-block; padding: 3px 10px; border-radius: 12px;
-           font-size: 11px; font-weight: 700; letter-spacing: .4px; white-space: nowrap; }
+           font-size: 11px; font-weight: 700; white-space: nowrap; }
   .badge.ok      { background: #dcfce7; color: #15803d; }
   .badge.warning { background: #fef3c7; color: #b45309; }
   .badge.fail    { background: #fee2e2; color: #b91c1c; }
   .badge.unknown { background: #f3f4f6; color: #6b7280; }
-
+  .badge.new     { background: #dbeafe; color: #1d4ed8; }
+  .badge.removed { background: #f3f4f6; color: #374151; }
+  .badge.worse   { background: #fee2e2; color: #b91c1c; }
+  .badge.better  { background: #dcfce7; color: #15803d; }
   .pagination { display: flex; align-items: center; justify-content: space-between;
-                padding: 14px 20px; border-top: 1px solid #f0f0f0;
-                flex-wrap: wrap; gap: 10px; }
+                padding: 14px 20px; border-top: 1px solid #f0f0f0; flex-wrap: wrap; gap: 10px; }
   .pag-info { font-size: 13px; color: #6b7280; }
   .pag-controls { display: flex; gap: 4px; align-items: center; flex-wrap: wrap; }
   .pag-btn { min-width: 34px; height: 34px; padding: 0 10px; border: 1px solid #d1d5db;
              border-radius: 6px; background: #fff; cursor: pointer; font-size: 13px;
-             display: flex; align-items: center; justify-content: center; transition: all .15s; }
-  .pag-btn:hover:not(:disabled) { background: #f3f4f6; }
+             display: flex; align-items: center; justify-content: center; }
   .pag-btn.active { background: #0f3460; color: #fff; border-color: #0f3460; font-weight: 700; }
   .pag-btn:disabled { opacity: .4; cursor: default; }
-  .pag-ellipsis { padding: 0 6px; color: #9ca3af; font-size: 14px; }
-
+  .pag-ellipsis { padding: 0 6px; color: #9ca3af; }
+  .history-table { width: 100%; border-collapse: collapse; }
+  .history-table th { background: #1a1a2e; color: #fff; padding: 10px 14px;
+                       text-align: left; font-size: 12px; text-transform: uppercase; }
+  .history-table td { padding: 10px 14px; border-bottom: 1px solid #f0f0f0; font-size: 13px; }
+  .history-table tr:hover td { background: #f9fafb; }
+  .src-badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; }
+  .src-cmdb { background: #dbeafe; color: #1d4ed8; } .src-csv { background: #fef3c7; color: #b45309; }
+  .chart-wrap { background: #fff; border-radius: 10px; padding: 24px;
+                box-shadow: 0 1px 4px rgba(0,0,0,.08); }
+  .chart-legend { display: flex; gap: 20px; margin-bottom: 16px; font-size: 13px; }
+  .legend-dot { display: inline-block; width: 12px; height: 12px; border-radius: 50%; margin-right: 6px; }
+  .compare-controls { background: #fff; border-radius: 10px; padding: 20px;
+                      box-shadow: 0 1px 4px rgba(0,0,0,.08); margin-bottom: 16px;
+                      display: flex; gap: 16px; align-items: flex-end; flex-wrap: wrap; }
+  .compare-controls label { font-size: 12px; font-weight: 600; color: #6b7280;
+                             text-transform: uppercase; display: block; margin-bottom: 4px; }
+  .diff-summary { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
+  .diff-card { flex: 1; min-width: 120px; background: #fff; border-radius: 10px;
+               padding: 14px 16px; box-shadow: 0 1px 4px rgba(0,0,0,.08); text-align: center; }
+  .diff-card .num { font-size: 28px; font-weight: 700; }
+  .diff-card .lbl { font-size: 11px; color: #6b7280; text-transform: uppercase; margin-top: 4px; }
+  .diff-card.worse .num { color: #dc2626; } .diff-card.better .num { color: #16a34a; }
+  .diff-card.newc  .num { color: #2563eb; } .diff-card.remc  .num { color: #6b7280; }
+  .panel { background: #fff; border-radius: 10px; box-shadow: 0 1px 4px rgba(0,0,0,.08); }
   .loading { padding: 60px; text-align: center; color: #9ca3af; font-size: 14px; }
   .empty   { padding: 40px; text-align: center; color: #9ca3af; font-size: 14px; }
   .footer  { text-align: center; margin-top: 20px; font-size: 12px; color: #9ca3af; }
@@ -432,249 +452,342 @@ _HTML = """<!DOCTYPE html>
 </head>
 <body>
 <div class="page">
-
   <div class="header">
-    <h1>Отчёт соответствия ОС корпоративному регламенту</h1>
-    <div class="meta" id="meta">Загрузка данных…</div>
+    <h1>CMDB OS Compliance</h1>
+    <div class="meta" id="meta">\u0417\u0430\u0433\u0440\u0443\u0437\u043a\u0430 \u0434\u0430\u043d\u043d\u044b\u0445\u2026</div>
+  </div>
+  <div class="tabs">
+    <button class="tab-btn active" onclick="showTab('table')">📋 \u0422\u0430\u0431\u043b\u0438\u0446\u0430</button>
+    <button class="tab-btn"        onclick="showTab('history')">🕗 \u0418\u0441\u0442\u043e\u0440\u0438\u044f</button>
+    <button class="tab-btn"        onclick="showTab('trend')">📈 \u0422\u0440\u0435\u043d\u0434</button>
+    <button class="tab-btn"        onclick="showTab('compare')">&#9878; \u0421\u0440\u0430\u0432\u043d\u0435\u043d\u0438\u0435</button>
   </div>
 
-  <div class="cards">
-    <div class="card total" onclick="setStatus('')">
-      <div class="num" id="cnt-total">…</div><div class="lbl">Всего</div></div>
-    <div class="card ok"   onclick="setStatus('OK')">
-      <div class="num" id="cnt-ok">…</div><div class="lbl">Соответствует</div></div>
-    <div class="card warn" onclick="setStatus('WARNING')">
-      <div class="num" id="cnt-warn">…</div><div class="lbl">Условно допустимо</div></div>
-    <div class="card fail" onclick="setStatus('NON_COMPLIANT')">
-      <div class="num" id="cnt-fail">…</div><div class="lbl">Не соответствует</div></div>
-    <div class="card unk"  onclick="setStatus('UNKNOWN')">
-      <div class="num" id="cnt-unk">…</div><div class="lbl">Нет данных об ОС</div></div>
-  </div>
-
-  <div class="filterbar">
-    <div class="filter-row">
-      <span class="filter-label">Статус</span>
-      <button class="filter-btn active" data-status="" onclick="setStatus('')">Все</button>
-      <button class="filter-btn" data-status="NON_COMPLIANT" onclick="setStatus('NON_COMPLIANT')">Не соответствует</button>
-      <button class="filter-btn" data-status="WARNING" onclick="setStatus('WARNING')">Условно</button>
-      <button class="filter-btn" data-status="OK" onclick="setStatus('OK')">OK</button>
-      <button class="filter-btn" data-status="UNKNOWN" onclick="setStatus('UNKNOWN')">Нет данных</button>
+  <div id="tab-table" class="tab-content active">
+    <div class="cards">
+      <div class="card total" onclick="setStatus('')" ><div class="num" id="cnt-total">\u2026</div><div class="lbl">\u0412\u0441\u0435\u0433\u043e</div></div>
+      <div class="card ok"   onclick="setStatus('OK')" ><div class="num" id="cnt-ok">\u2026</div><div class="lbl">\u0421\u043e\u043e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0443\u0435\u0442</div></div>
+      <div class="card warn" onclick="setStatus('WARNING')" ><div class="num" id="cnt-warn">\u2026</div><div class="lbl">\u0423\u0441\u043b\u043e\u0432\u043d\u043e</div></div>
+      <div class="card fail" onclick="setStatus('NON_COMPLIANT')" ><div class="num" id="cnt-fail">\u2026</div><div class="lbl">\u041d\u0435 \u0441\u043e\u043e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0443\u0435\u0442</div></div>
+      <div class="card unk"  onclick="setStatus('UNKNOWN')" ><div class="num" id="cnt-unk">\u2026</div><div class="lbl">\u041d\u0435\u0442 \u0434\u0430\u043d\u043d\u044b\u0445</div></div>
     </div>
-    <div class="filter-row">
-      <span class="filter-label">ОС</span>
-      <button class="filter-btn active" data-fam="" onclick="setFamily('')">Все</button>
-      <button class="filter-btn fam-ws" data-fam="windows_server" onclick="setFamily('windows_server')">Windows Server</button>
-      <button class="filter-btn fam-wc" data-fam="windows_client" onclick="setFamily('windows_client')">Windows Client</button>
-      <button class="filter-btn fam-lx" data-fam="linux" onclick="setFamily('linux')">Linux</button>
-      <button class="filter-btn fam-unk" data-fam="unknown" onclick="setFamily('unknown')">Неизвестно</button>
+    <div class="filterbar">
+      <div class="filter-row">
+        <span class="filter-label">\u0421\u0442\u0430\u0442\u0443\u0441</span>
+        <button class="filter-btn active" data-status="" onclick="setStatus('')" >\u0412\u0441\u0435</button>
+        <button class="filter-btn" data-status="NON_COMPLIANT" onclick="setStatus('NON_COMPLIANT')" >\u041d\u0435 \u0441\u043e\u043e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0443\u0435\u0442</button>
+        <button class="filter-btn" data-status="WARNING" onclick="setStatus('WARNING')" >\u0423\u0441\u043b\u043e\u0432\u043d\u043e</button>
+        <button class="filter-btn" data-status="OK" onclick="setStatus('OK')" >OK</button>
+        <button class="filter-btn" data-status="UNKNOWN" onclick="setStatus('UNKNOWN')" >\u041d\u0435\u0442 \u0434\u0430\u043d\u043d\u044b\u0445</button>
+      </div>
+      <div class="filter-row">
+        <span class="filter-label">\u041e\u0421</span>
+        <button class="filter-btn active" data-fam="" onclick="setFamily('')" >\u0412\u0441\u0435</button>
+        <button class="filter-btn fam-ws" data-fam="windows_server" onclick="setFamily('windows_server')" >Windows Server</button>
+        <button class="filter-btn fam-wc" data-fam="windows_client" onclick="setFamily('windows_client')" >Windows Client</button>
+        <button class="filter-btn fam-lx" data-fam="linux" onclick="setFamily('linux')" >Linux</button>
+        <button class="filter-btn fam-unk" data-fam="unknown" onclick="setFamily('unknown')" >\u041d\u0435\u0438\u0437\u0432\u0435\u0441\u0442\u043d\u043e</button>
+      </div>
+      <div class="filter-row">
+        <span class="filter-label">\u0414\u0438\u0432\u0438\u0437\u0438\u043e\u043d</span>
+        <select class="sel" id="div-sel" onchange="setDivision(this.value)"><option value="">\u0412\u0441\u0435 \u0434\u0438\u0432\u0438\u0437\u0438\u043e\u043d\u044b</option></select>
+        <select class="sel" onchange="changeSize(this.value)" style="margin-left:auto">
+          <option value="50">50 / \u0441\u0442\u0440.</option><option value="100" selected>100 / \u0441\u0442\u0440.</option>
+          <option value="200">200 / \u0441\u0442\u0440.</option><option value="500">500 / \u0441\u0442\u0440.</option>
+        </select>
+      </div>
+      <div class="filter-row">
+        <span class="filter-label">\u041f\u043e\u0438\u0441\u043a</span>
+        <input type="text" id="search" placeholder="\u041f\u043e\u0438\u0441\u043a \u043f\u043e \u0445\u043e\u0441\u0442\u0443, \u041e\u0421, \u0432\u043b\u0430\u0434\u0435\u043b\u044c\u0446\u0443\u2026" oninput="debounceSearch(this.value)">
+        <button class="export-btn" onclick="exportCSV()">&#11015; \u0421\u043a\u0430\u0447\u0430\u0442\u044c CSV</button>
+      </div>
     </div>
-    <div class="filter-row">
-      <span class="filter-label">Дивизион</span>
-      <select class="sel" id="div-sel" onchange="setDivision(this.value)">
-        <option value="">Все дивизионы</option>
-      </select>
-      <select class="sel" onchange="changeSize(this.value)" style="margin-left:auto">
-        <option value="50">50 / стр.</option>
-        <option value="100" selected>100 / стр.</option>
-        <option value="200">200 / стр.</option>
-        <option value="500">500 / стр.</option>
-      </select>
-    </div>
-    <div class="filter-row">
-      <span class="filter-label">Поиск</span>
-      <input type="text" id="search" placeholder="Поиск по хосту, ОС, владельцу…"
-             oninput="debounceSearch(this.value)">
-      <button class="export-btn" onclick="exportCSV()">&#11015; Скачать CSV</button>
-    </div>
-  </div>
-
-  <div class="table-wrap">
-    <table>
-      <thead id="thead"></thead>
-      <tbody id="tbody"><tr><td class="loading" colspan="8">Загрузка данных из CMDB…</td></tr></tbody>
-    </table>
-    <div class="pagination">
-      <div class="pag-info" id="pag-info"></div>
-      <div class="pag-controls" id="pag-controls"></div>
+    <div class="table-wrap">
+      <table><thead id="thead"></thead>
+      <tbody id="tbody"><tr><td class="loading" colspan="8">\u0417\u0430\u0433\u0440\u0443\u0437\u043a\u0430\u2026</td></tr></tbody></table>
+      <div class="pagination">
+        <div class="pag-info" id="pag-info"></div>
+        <div class="pag-controls" id="pag-controls"></div>
+      </div>
     </div>
   </div>
 
-  <div class="footer">Регламент допустимых ОС от 13.05.2026 &nbsp;·&nbsp; CMDB OS Compliance</div>
+  <div id="tab-history" class="tab-content">
+    <div class="panel" style="margin-bottom:16px;padding:16px 20px;display:flex;gap:12px;align-items:center">
+      <strong style="font-size:14px">\u0418\u043c\u043f\u043e\u0440\u0442 CSV-\u043e\u0442\u0447\u0451\u0442\u0430</strong>
+      <input type="file" id="csv-file" accept=".csv" style="font-size:13px">
+      <button class="action-btn" onclick="importCSV()">\u0417\u0430\u0433\u0440\u0443\u0437\u0438\u0442\u044c</button>
+      <span id="import-status" style="font-size:13px;color:#6b7280"></span>
+    </div>
+    <div class="table-wrap">
+      <table class="history-table">
+        <thead><tr>
+          <th>\u0414\u0430\u0442\u0430</th><th>\u0418\u0441\u0442\u043e\u0447\u043d\u0438\u043a</th><th>\u0412\u0441\u0435\u0433\u043e</th>
+          <th style="color:#86efac">OK</th><th style="color:#fcd34d">WARNING</th>
+          <th style="color:#fca5a5">NON_COMPLIANT</th><th></th>
+        </tr></thead>
+        <tbody id="history-tbody"><tr><td class="loading" colspan="7">\u0417\u0430\u0433\u0440\u0443\u0437\u043a\u0430\u2026</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div id="tab-trend" class="tab-content">
+    <div class="chart-wrap">
+      <div class="chart-legend">
+        <span><span class="legend-dot" style="background:#16a34a"></span>OK</span>
+        <span><span class="legend-dot" style="background:#d97706"></span>WARNING</span>
+        <span><span class="legend-dot" style="background:#dc2626"></span>NON_COMPLIANT</span>
+      </div>
+      <svg id="trend-svg" width="100%" height="340" style="display:block"></svg>
+      <div id="trend-empty" class="empty" style="display:none">\u041d\u0435\u0434\u043e\u0441\u0442\u0430\u0442\u043e\u0447\u043d\u043e \u0434\u0430\u043d\u043d\u044b\u0445 \u2014 \u043d\u0443\u0436\u043d\u043e \u043c\u0438\u043d\u0438\u043c\u0443\u043c 2 \u0441\u043d\u0438\u043c\u043a\u0430</div>
+    </div>
+  </div>
+
+  <div id="tab-compare" class="tab-content">
+    <div class="compare-controls">
+      <div><label>\u0421\u043d\u0438\u043c\u043e\u043a A (\u0441\u0442\u0430\u0440\u044b\u0439)</label><select class="sel" id="cmp-a" style="min-width:260px"></select></div>
+      <div><label>\u0421\u043d\u0438\u043c\u043e\u043a B (\u043d\u043e\u0432\u044b\u0439)</label><select class="sel" id="cmp-b" style="min-width:260px"></select></div>
+      <button class="action-btn" onclick="runCompare()">\u0421\u0440\u0430\u0432\u043d\u0438\u0442\u044c</button>
+    </div>
+    <div id="diff-summary" class="diff-summary" style="display:none">
+      <div class="diff-card worse"><div class="num" id="diff-worse">0</div><div class="lbl">\u0423\u0445\u0443\u0434\u0448\u0438\u043b\u0438\u0441\u044c</div></div>
+      <div class="diff-card better"><div class="num" id="diff-better">0</div><div class="lbl">\u0423\u043b\u0443\u0447\u0448\u0438\u043b\u0438\u0441\u044c</div></div>
+      <div class="diff-card newc"><div class="num" id="diff-new">0</div><div class="lbl">\u041d\u043e\u0432\u044b\u0435</div></div>
+      <div class="diff-card remc"><div class="num" id="diff-removed">0</div><div class="lbl">\u0423\u0434\u0430\u043b\u0451\u043d\u043d\u044b\u0435</div></div>
+    </div>
+    <div id="diff-filter-row" style="display:none;margin-bottom:12px">
+      <div class="filterbar" style="padding:10px 16px">
+        <div class="filter-row">
+          <button class="filter-btn active" data-diff="all"      onclick="setDiffFilter(this)">\u0412\u0441\u0435</button>
+          <button class="filter-btn"        data-diff="worsened" onclick="setDiffFilter(this)">\u0423\u0445\u0443\u0434\u0448\u0438\u043b\u0438\u0441\u044c</button>
+          <button class="filter-btn"        data-diff="improved" onclick="setDiffFilter(this)">\u0423\u043b\u0443\u0447\u0448\u0438\u043b\u0438\u0441\u044c</button>
+          <button class="filter-btn"        data-diff="new"      onclick="setDiffFilter(this)">\u041d\u043e\u0432\u044b\u0435</button>
+          <button class="filter-btn"        data-diff="removed"  onclick="setDiffFilter(this)">\u0423\u0434\u0430\u043b\u0451\u043d\u043d\u044b\u0435</button>
+        </div>
+      </div>
+    </div>
+    <div class="table-wrap" id="diff-table-wrap" style="display:none">
+      <table>
+        <thead><tr style="background:#1a1a2e;color:#fff">
+          <th style="padding:10px 14px;font-size:12px">\u0425\u043e\u0441\u0442</th>
+          <th style="padding:10px 14px;font-size:12px">\u0418\u0437\u043c\u0435\u043d\u0435\u043d\u0438\u0435</th>
+          <th style="padding:10px 14px;font-size:12px">\u041e\u0421</th>
+          <th style="padding:10px 14px;font-size:12px">\u0412\u043b\u0430\u0434\u0435\u043b\u0435\u0446</th>
+          <th style="padding:10px 14px;font-size:12px">\u0414\u0438\u0432\u0438\u0437\u0438\u043e\u043d</th>
+          <th style="padding:10px 14px;font-size:12px">\u041f\u0440\u0438\u0447\u0438\u043d\u0430 (\u043d\u043e\u0432\u0430\u044f)</th>
+        </tr></thead>
+        <tbody id="diff-tbody"></tbody>
+      </table>
+    </div>
+    <div id="diff-empty" class="empty" style="display:none">\u041d\u0435\u0442 \u0438\u0437\u043c\u0435\u043d\u0435\u043d\u0438\u0439 \u043c\u0435\u0436\u0434\u0443 \u0432\u044b\u0431\u0440\u0430\u043d\u043d\u044b\u043c\u0438 \u0441\u043d\u0438\u043c\u043a\u0430\u043c\u0438</div>
+  </div>
+
+  <div class="footer">\u0420\u0435\u0433\u043b\u0430\u043c\u0435\u043d\u0442 \u0434\u043e\u043f\u0443\u0441\u0442\u0438\u043c\u044b\u0445 \u041e\u0421 \u043e\u0442 13.05.2026 &nbsp;&middot;&nbsp; CMDB OS Compliance</div>
 </div>
-
 <script>
-const COLS = [
-  {f:'shorthost', label:'Хост',     cls:'host'},
-  {f:'os_name',   label:'ОС',       cls:'os'},
-  {f:'owner',     label:'Владелец', cls:'own'},
-  {f:'division',  label:'Дивизион', cls:'div'},
-  {f:'ke_type',   label:'Тип КЕ',  cls:'ke'},
-  {f:'family',    label:'Семейство',cls:'fam'},
-  {f:'status',    label:'Статус',   cls:''},
-  {f:'reason',    label:'Причина',  cls:'reason'},
+function esc(s){return String(s||''). replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function fmtTs(ts){return ts?ts.replace('T',' ').slice(0,16):'';}
+const TABS=['table','history','trend','compare'];
+function showTab(name){
+  document.querySelectorAll('.tab-content').forEach(el=>el.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(el=>el.classList.remove('active'));
+  document.getElementById('tab-'+name).classList.add('active');
+  document.querySelectorAll('.tab-btn')[TABS.indexOf(name)].classList.add('active');
+  if(name==='history')loadHistory();
+  if(name==='trend')loadTrend();
+  if(name==='compare')loadCompareSelects();
+}
+const COLS=[
+  {f:'shorthost',label:'\u0425\u043e\u0441\u0442',cls:'host'},{f:'os_name',label:'\u041e\u0421',cls:'os'},
+  {f:'owner',label:'\u0412\u043b\u0430\u0434\u0435\u043b\u0435\u0446',cls:'own'},{f:'division',label:'\u0414\u0438\u0432\u0438\u0437\u0438\u043e\u043d',cls:'div'},
+  {f:'ke_type',label:'\u0422\u0438\u043f \u041a\u0415',cls:'ke'},{f:'family',label:'\u0421\u0435\u043c\u0435\u0439\u0441\u0442\u0432\u043e',cls:'fam'},
+  {f:'status',label:'\u0421\u0442\u0430\u0442\u0443\u0441',cls:''},{f:'reason',label:'\u041f\u0440\u0438\u0447\u0438\u043d\u0430',cls:'reason'},
 ];
-const ROW_CLASS = {
-  OK: 'row-ok', WARNING: 'row-warning',
-  NON_COMPLIANT: 'row-fail', UNKNOWN: 'row-unknown'
+const ROW_CLASS={OK:'row-ok',WARNING:'row-warning',NON_COMPLIANT:'row-fail',UNKNOWN:'row-unknown'};
+const BADGE={
+  OK:'<span class="badge ok">OK</span>',WARNING:'<span class="badge warning">WARNING</span>',
+  NON_COMPLIANT:'<span class="badge fail">NON_COMPLIANT</span>',UNKNOWN:'<span class="badge unknown">UNKNOWN</span>',
 };
-const BADGE = {
-  OK:            '<span class="badge ok">OK</span>',
-  WARNING:       '<span class="badge warning">WARNING</span>',
-  NON_COMPLIANT: '<span class="badge fail">NON_COMPLIANT</span>',
-  UNKNOWN:       '<span class="badge unknown">UNKNOWN</span>',
-};
-const FAM = {
-  windows_server: 'Win Server', windows_client: 'Win Client',
-  linux: 'Linux', unknown: '—'
-};
-
-let state = { page:1, size:100, status:'', family:'', division:'', q:'', sort:'', dir:'asc' };
-let _searchTimer = null;
-
-function esc(s) {
-  return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+const FAM={windows_server:'Win Server',windows_client:'Win Client',linux:'Linux',unknown:'\u2014'};
+let state={page:1,size:100,status:'',family:'',division:'',q:'',sort:'',dir:'asc'};
+let _searchTimer=null;
+async function fetchStats(){
+  const d=await(await fetch('/api/stats')).json();
+  document.getElementById('cnt-total').textContent=d.total;
+  document.getElementById('cnt-ok').textContent=d.OK;
+  document.getElementById('cnt-warn').textContent=d.WARNING;
+  document.getElementById('cnt-fail').textContent=d.NON_COMPLIANT;
+  document.getElementById('cnt-unk').textContent=d.UNKNOWN;
+  document.getElementById('meta').textContent='\u0412\u0441\u0435\u0433\u043e \u041a\u0415: '+d.total+'  |  NON_COMPLIANT: '+d.NON_COMPLIANT+'  |  OK: '+d.OK;
 }
-
-async function fetchStats() {
-  const d = await (await fetch('/api/stats')).json();
-  document.getElementById('cnt-total').textContent = d.total;
-  document.getElementById('cnt-ok').textContent    = d.OK;
-  document.getElementById('cnt-warn').textContent  = d.WARNING;
-  document.getElementById('cnt-fail').textContent  = d.NON_COMPLIANT;
-  document.getElementById('cnt-unk').textContent   = d.UNKNOWN;
-  document.getElementById('meta').textContent =
-    'Всего КЕ: ' + d.total + '  |  Не соответствует: ' + d.NON_COMPLIANT + '  |  OK: ' + d.OK;
+async function fetchDivisions(){
+  const d=await(await fetch('/api/divisions')).json();
+  const sel=document.getElementById('div-sel');
+  d.divisions.forEach(v=>{const o=document.createElement('option');o.value=v;o.textContent=v;sel.appendChild(o);});
 }
-
-async function fetchDivisions() {
-  const d = await (await fetch('/api/divisions')).json();
-  const sel = document.getElementById('div-sel');
-  d.divisions.forEach(v => {
-    const o = document.createElement('option');
-    o.value = v; o.textContent = v; sel.appendChild(o);
-  });
+async function fetchData(){
+  const p=new URLSearchParams({page:state.page,size:state.size});
+  if(state.status)p.set('status',state.status);if(state.family)p.set('family',state.family);
+  if(state.division)p.set('division',state.division);if(state.q)p.set('q',state.q);
+  if(state.sort){p.set('sort',state.sort);p.set('dir',state.dir);}
+  document.getElementById('tbody').innerHTML='<tr><td class="loading" colspan="8">\u0417\u0430\u0433\u0440\u0443\u0437\u043a\u0430\u2026</td></tr>';
+  const d=await(await fetch('/api/data?'+p)).json();
+  renderHeaders();renderRows(d.data);renderPagination(d.total,d.page,d.pages);
 }
-
-async function fetchData() {
-  const p = new URLSearchParams({ page: state.page, size: state.size });
-  if (state.status)   p.set('status',   state.status);
-  if (state.family)   p.set('family',   state.family);
-  if (state.division) p.set('division', state.division);
-  if (state.q)        p.set('q',        state.q);
-  if (state.sort)     { p.set('sort', state.sort); p.set('dir', state.dir); }
-
-  document.getElementById('tbody').innerHTML =
-    '<tr><td class="loading" colspan="8">Загрузка…</td></tr>';
-  const d = await (await fetch('/api/data?' + p)).json();
-  renderHeaders();
-  renderRows(d.data);
-  renderPagination(d.total, d.page, d.pages);
+function renderHeaders(){
+  document.getElementById('thead').innerHTML='<tr>'+COLS.map(c=>{
+    const cls=state.sort===c.f?(state.dir==='asc'?' class="sort-asc"':'  class="sort-desc"'):'';
+    return '<th'+cls+' onclick="toggleSort(\\''+c.f+'\\')">'+c.label+'</th>';
+  }).join('')+'</tr>';
 }
-
-function renderHeaders() {
-  document.getElementById('thead').innerHTML = '<tr>' +
-    COLS.map(c => {
-      const cls = state.sort === c.f
-        ? (state.dir === 'asc' ? ' class="sort-asc"' : ' class="sort-desc"')
-        : '';
-      return '<th' + cls + ' onclick="toggleSort(\'' + c.f + '\')">' + c.label + '</th>';
-    }).join('') + '</tr>';
-}
-
-function renderRows(rows) {
-  const tbody = document.getElementById('tbody');
-  if (!rows.length) {
-    tbody.innerHTML = '<tr><td class="empty" colspan="8">Ничего не найдено</td></tr>';
-    return;
-  }
-  tbody.innerHTML = rows.map(r =>
-    '<tr class="' + (ROW_CLASS[r.status] || '') + '">' +
-    '<td class="host">'   + esc(r.shorthost)           + '</td>' +
-    '<td class="os">'     + esc(r.os_name)             + '</td>' +
-    '<td class="own">'    + esc(r.owner)               + '</td>' +
-    '<td class="div">'    + esc(r.division || '—')     + '</td>' +
-    '<td class="ke">'     + esc(r.ke_type)             + '</td>' +
-    '<td class="fam">'    + esc(FAM[r.family] || r.family) + '</td>' +
-    '<td>'                + (BADGE[r.status] || esc(r.status)) + '</td>' +
-    '<td class="reason">' + esc(r.reason)              + '</td>' +
-    '</tr>'
+function renderRows(rows){
+  const tbody=document.getElementById('tbody');
+  if(!rows.length){tbody.innerHTML='<tr><td class="empty" colspan="8">\u041d\u0438\u0447\u0435\u0433\u043e \u043d\u0435 \u043d\u0430\u0439\u0434\u0435\u043d\u043e</td></tr>';return;}
+  tbody.innerHTML=rows.map(r=>
+    '<tr class="'+(ROW_CLASS[r.status]||'')+'">' +
+    '<td class="host">'+esc(r.shorthost)+'</td><td class="os">'+esc(r.os_name)+'</td>' +
+    '<td class="own">'+esc(r.owner)+'</td><td class="div">'+esc(r.division||'\u2014')+'</td>' +
+    '<td class="ke">'+esc(r.ke_type)+'</td><td class="fam">'+esc(FAM[r.family]||r.family)+'</td>' +
+    '<td>'+(BADGE[r.status]||esc(r.status))+'</td><td class="reason">'+esc(r.reason)+'</td></tr>'
   ).join('');
 }
-
-function renderPagination(total, page, pages) {
-  const start = total ? (page - 1) * state.size + 1 : 0;
-  const end   = Math.min(page * state.size, total);
-  document.getElementById('pag-info').textContent =
-    'Показано ' + start + '–' + end + ' из ' + total;
-
-  let html = '';
-  html += '<button class="pag-btn" onclick="goTo(1)" ' + (page===1?'disabled':'') + '>&laquo;</button>';
-  html += '<button class="pag-btn" onclick="goTo(' + (page-1) + ')" ' + (page===1?'disabled':'') + '>&lsaquo;</button>';
-  for (let p = 1; p <= pages; p++) {
-    if (p === 1 || p === pages || Math.abs(p - page) <= 2)
-      html += '<button class="pag-btn' + (p===page?' active':'') + '" onclick="goTo(' + p + ')">' + p + '</button>';
-    else if (Math.abs(p - page) === 3)
-      html += '<span class="pag-ellipsis">…</span>';
+function renderPagination(total,page,pages){
+  const start=total?(page-1)*state.size+1:0,end=Math.min(page*state.size,total);
+  document.getElementById('pag-info').textContent='\u041f\u043e\u043a\u0430\u0437\u0430\u043d\u043e '+start+'\u2013'+end+' \u0438\u0437 '+total;
+  let html='<button class="pag-btn" onclick="goTo(1)" '+(page===1?'disabled':'')+'>&laquo;</button>';
+  html+='<button class="pag-btn" onclick="goTo('+(page-1)+')" '+(page===1?'disabled':'')+'>&lsaquo;</button>';
+  for(let p=1;p<=pages;p++){
+    if(p===1||p===pages||Math.abs(p-page)<=2)
+      html+='<button class="pag-btn'+(p===page?' active':'')+'" onclick="goTo('+p+')">'+ p+'</button>';
+    else if(Math.abs(p-page)===3)html+='<span class="pag-ellipsis">\u2026</span>';
   }
-  html += '<button class="pag-btn" onclick="goTo(' + (page+1) + ')" ' + (page===pages?'disabled':'') + '>&rsaquo;</button>';
-  html += '<button class="pag-btn" onclick="goTo(' + pages + ')" ' + (page===pages?'disabled':'') + '>&raquo;</button>';
-  document.getElementById('pag-controls').innerHTML = html;
+  html+='<button class="pag-btn" onclick="goTo('+(page+1)+')" '+(page===pages?'disabled':'')+'>&rsaquo;</button>';
+  html+='<button class="pag-btn" onclick="goTo('+pages+')" '+(page===pages?'disabled':'')+'>&raquo;</button>';
+  document.getElementById('pag-controls').innerHTML=html;
 }
-
-function goTo(p) {
-  state.page = p;
-  fetchData();
-  window.scrollTo({ top: 0, behavior: 'smooth' });
+function goTo(p){state.page=p;fetchData();window.scrollTo({top:0,behavior:'smooth'});}
+function changeSize(v){state.size=+v;state.page=1;fetchData();}
+function setStatus(v){state.status=v;state.page=1;document.querySelectorAll('[data-status]').forEach(b=>b.classList.toggle('active',b.dataset.status===v));fetchData();}
+function setFamily(v){state.family=v;state.page=1;document.querySelectorAll('[data-fam]').forEach(b=>b.classList.toggle('active',b.dataset.fam===v));fetchData();}
+function setDivision(v){state.division=v;state.page=1;fetchData();}
+function debounceSearch(v){clearTimeout(_searchTimer);_searchTimer=setTimeout(()=>{state.q=v;state.page=1;fetchData();},300);}
+function toggleSort(field){if(state.sort===field){if(state.dir==='asc')state.dir='desc';else{state.sort='';state.dir='asc';}}else{state.sort=field;state.dir='asc';}state.page=1;fetchData();}
+function exportCSV(){const p=new URLSearchParams();if(state.status)p.set('status',state.status);if(state.family)p.set('family',state.family);if(state.division)p.set('division',state.division);if(state.q)p.set('q',state.q);if(state.sort){p.set('sort',state.sort);p.set('dir',state.dir);}window.location='/api/export?'+p;}
+async function loadHistory(){
+  const snaps=await(await fetch('/api/snapshots')).json();
+  const tbody=document.getElementById('history-tbody');
+  if(!snaps.length){tbody.innerHTML='<tr><td class="empty" colspan="7">\u041d\u0435\u0442 \u0441\u043d\u0438\u043c\u043a\u043e\u0432</td></tr>';return;}
+  tbody.innerHTML=snaps.map(s=>
+    '<tr><td>'+esc(fmtTs(s.timestamp))+'</td>' +
+    '<td><span class="src-badge src-'+esc(s.source)+'">'+(s.source==='cmdb'?'CMDB':'CSV')+'</span></td>' +
+    '<td>'+s.summary.total+'</td><td style="color:#16a34a;font-weight:600">'+s.summary.OK+'</td>' +
+    '<td style="color:#d97706;font-weight:600">'+s.summary.WARNING+'</td>' +
+    '<td style="color:#dc2626;font-weight:600">'+s.summary.NON_COMPLIANT+'</td>' +
+    '<td><button class="action-btn secondary" style="padding:4px 10px;font-size:12px" onclick="preselectCompare(\\''+esc(s.id)+'\\')" >\u0421\u0440\u0430\u0432\u043d\u0438\u0442\u044c</button></td></tr>'
+  ).join('');
 }
-
-function changeSize(v) { state.size = +v; state.page = 1; fetchData(); }
-
-function setStatus(v) {
-  state.status = v; state.page = 1;
-  document.querySelectorAll('[data-status]').forEach(b =>
-    b.classList.toggle('active', b.dataset.status === v));
-  fetchData();
+async function importCSV(){
+  const input=document.getElementById('csv-file');
+  const status=document.getElementById('import-status');
+  if(!input.files.length){status.textContent='\u0412\u044b\u0431\u0435\u0440\u0438\u0442\u0435 \u0444\u0430\u0439\u043b';return;}
+  status.textContent='\u0417\u0430\u0433\u0440\u0443\u0436\u0430\u044e\u2026';
+  const fd=new FormData();fd.append('file',input.files[0]);
+  const r=await fetch('/api/snapshots/import',{method:'POST',body:fd});
+  const d=await r.json();
+  if(d.error){status.textContent='\u041e\u0448\u0438\u0431\u043a\u0430: '+d.error;return;}
+  status.textContent='\u0417\u0430\u0433\u0440\u0443\u0436\u0435\u043d \u0441\u043d\u0438\u043c\u043e\u043a \u043e\u0442 '+fmtTs(d.timestamp)+' ('+d.summary.total+' \u041a\u0415)';
+  loadHistory();loadCompareSelects();
 }
-
-function setFamily(v) {
-  state.family = v; state.page = 1;
-  document.querySelectorAll('[data-fam]').forEach(b =>
-    b.classList.toggle('active', b.dataset.fam === v));
-  fetchData();
+function preselectCompare(snapId){showTab('compare');setTimeout(()=>{const s=document.getElementById('cmp-b');if(s)s.value=snapId;},100);}
+async function loadTrend(){
+  const d=await(await fetch('/api/trend')).json();
+  const snaps=d.snapshots.slice().reverse();
+  const svg=document.getElementById('trend-svg');
+  const empty=document.getElementById('trend-empty');
+  if(snaps.length<2){svg.style.display='none';empty.style.display='block';return;}
+  svg.style.display='block';empty.style.display='none';
+  drawTrendChart(svg,snaps);
 }
-
-function setDivision(v) { state.division = v; state.page = 1; fetchData(); }
-
-function debounceSearch(v) {
-  clearTimeout(_searchTimer);
-  _searchTimer = setTimeout(() => { state.q = v; state.page = 1; fetchData(); }, 300);
-}
-
-function toggleSort(field) {
-  if (state.sort === field) {
-    if (state.dir === 'asc') { state.dir = 'desc'; }
-    else { state.sort = ''; state.dir = 'asc'; }
-  } else {
-    state.sort = field; state.dir = 'asc';
+function drawTrendChart(svg,snaps){
+  const W=svg.clientWidth||900,H=300;
+  const PAD={top:20,right:20,bottom:60,left:70};
+  const pw=W-PAD.left-PAD.right,ph=H-PAD.top-PAD.bottom;
+  const maxVal=Math.max(...snaps.flatMap(s=>[s.summary.OK,s.summary.WARNING,s.summary.NON_COMPLIANT]),1);
+  const n=snaps.length;
+  function x(i){return PAD.left+(i/(n-1))*pw;}
+  function y(v){return PAD.top+ph-(v/maxVal)*ph;}
+  function poly(key,color){
+    const pts=snaps.map((s,i)=>x(i)+','+y(s.summary[key])).join(' ');
+    return '<polyline points="'+pts+'" fill="none" stroke="'+color+'" stroke-width="2.5" stroke-linejoin="round"/>'+
+      snaps.map((s,i)=>'<circle cx="'+x(i)+'" cy="'+y(s.summary[key])+'" r="4" fill="'+color+'"><title>'+s.summary[key]+'</title></circle>').join('');
   }
-  state.page = 1;
-  fetchData();
+  let grid='',yLbls='';
+  for(let i=0;i<=4;i++){
+    const yv=PAD.top+ph*(1-i/4),val=Math.round(maxVal*(i/4));
+    grid+='<line x1="'+PAD.left+'" y1="'+yv+'" x2="'+( W-PAD.right)+'" y2="'+yv+'" stroke="#f0f0f0"/>';
+    yLbls+='<text x="'+(PAD.left-8)+'" y="'+(yv+4)+'" text-anchor="end" font-size="11" fill="#9ca3af">'+val+'</text>';
+  }
+  const xLbls=snaps.map((s,i)=>'<text x="'+x(i)+'" y="'+(H-PAD.bottom+20)+'" text-anchor="middle" font-size="11" fill="#6b7280">'+esc((s.timestamp||''). slice(0,10))+'</text>').join('');
+  svg.setAttribute('viewBox','0 0 '+W+' '+H);
+  svg.innerHTML=grid+yLbls+xLbls+poly('OK','#16a34a')+poly('WARNING','#d97706')+poly('NON_COMPLIANT','#dc2626');
 }
-
-function exportCSV() {
-  const p = new URLSearchParams();
-  if (state.status)   p.set('status',   state.status);
-  if (state.family)   p.set('family',   state.family);
-  if (state.division) p.set('division', state.division);
-  if (state.q)        p.set('q',        state.q);
-  if (state.sort)     { p.set('sort', state.sort); p.set('dir', state.dir); }
-  window.location = '/api/export?' + p;
+async function loadCompareSelects(){
+  const snaps=await(await fetch('/api/snapshots')).json();
+  ['cmp-a','cmp-b'].forEach(id=>{
+    const sel=document.getElementById(id);const cur=sel.value;
+    sel.innerHTML='<option value="">\u2014 \u0432\u044b\u0431\u0435\u0440\u0438\u0442\u0435 \u0441\u043d\u0438\u043c\u043e\u043a \u2014</option>'+
+      snaps.map(s=>'<option value="'+esc(s.id)+'">'+esc(fmtTs(s.timestamp))+' ('+s.source.toUpperCase()+') \u2014 '+s.summary.total+' \u041a\u0415</option>').join('');
+    if(cur)sel.value=cur;
+  });
 }
-
-// Boot
-fetchStats();
-fetchDivisions();
-fetchData();
+let _diffData=null,_diffFilter='all';
+async function runCompare(){
+  const a=document.getElementById('cmp-a').value,b=document.getElementById('cmp-b').value;
+  if(!a||!b){alert('\u0412\u044b\u0431\u0435\u0440\u0438\u0442\u0435 \u043e\u0431\u0430 \u0441\u043d\u0438\u043c\u043a\u0430');return;}
+  const d=await(await fetch('/api/compare?a='+a+'&b='+b)).json();
+  if(d.error){alert('\u041e\u0448\u0438\u0431\u043a\u0430: '+d.error);return;}
+  _diffData=d;_diffFilter='all';
+  document.querySelectorAll('[data-diff]').forEach(b=>b.classList.toggle('active',b.dataset.diff==='all'));
+  renderDiff();
+}
+function renderDiff(){
+  if(!_diffData)return;
+  const{diff}=_diffData;
+  const worse=diff.changed.filter(h=>h.direction==='worsened');
+  const better=diff.changed.filter(h=>h.direction==='improved');
+  document.getElementById('diff-worse').textContent=worse.length;
+  document.getElementById('diff-better').textContent=better.length;
+  document.getElementById('diff-new').textContent=diff.new.length;
+  document.getElementById('diff-removed').textContent=diff.removed.length;
+  document.getElementById('diff-summary').style.display='flex';
+  document.getElementById('diff-filter-row').style.display='block';
+  let rows=[];
+  if(_diffFilter==='all'||_diffFilter==='worsened')rows=rows.concat(worse.map(h=>diffRow(h,'worsened')));
+  if(_diffFilter==='all'||_diffFilter==='improved')rows=rows.concat(better.map(h=>diffRow(h,'improved')));
+  if(_diffFilter==='all'||_diffFilter==='new')rows=rows.concat(diff.new.map(h=>({...h,direction:'new'})).map(h=>diffRow(h,'new')));
+  if(_diffFilter==='all'||_diffFilter==='removed')rows=rows.concat(diff.removed.map(h=>({...h,direction:'removed'})).map(h=>diffRow(h,'removed')));
+  const wrap=document.getElementById('diff-table-wrap'),empty=document.getElementById('diff-empty');
+  if(!rows.length){wrap.style.display='none';empty.style.display='block';}
+  else{wrap.style.display='block';empty.style.display='none';document.getElementById('diff-tbody').innerHTML=rows.join('');}
+}
+function diffRow(h,kind){
+  const CHANGE_BADGE={
+    worsened:'<span class="badge worse">\u2b07 '+esc(h.status_from||h.status)+' \u2192 '+esc(h.status_to||h.status)+'</span>',
+    improved:'<span class="badge better">\u2b06 '+esc(h.status_from||h.status)+' \u2192 '+esc(h.status_to||h.status)+'</span>',
+    new:'<span class="badge new">\U0001f195 \u041d\u043e\u0432\u044b\u0439 ('+esc(h.status)+')</span>',
+    removed:'<span class="badge removed">\u274c \u0423\u0434\u0430\u043b\u0451\u043d ('+esc(h.status_from||h.status)+')</span>',
+  };
+  return '<tr class="'+(kind==='worsened'?'row-fail':kind==='improved'?'row-ok':'')+'">' +
+    '<td class="host">'+esc(h.shorthost)+'</td><td>'+(CHANGE_BADGE[kind]||'')+'</td>' +
+    '<td class="os">'+esc(h.os_name||'')+'</td><td class="own">'+esc(h.owner||'')+'</td>' +
+    '<td class="div">'+esc(h.division||'\u2014')+'</td><td class="reason">'+esc(h.reason_to||h.reason||'')+'</td></tr>';
+}
+function setDiffFilter(btn){
+  _diffFilter=btn.dataset.diff;
+  document.querySelectorAll('[data-diff]').forEach(b=>b.classList.toggle('active',b.dataset.diff===_diffFilter));
+  renderDiff();
+}
+fetchStats();fetchDivisions();fetchData();
 </script>
 </body>
 </html>"""
