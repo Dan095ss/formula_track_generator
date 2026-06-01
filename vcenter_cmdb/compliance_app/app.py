@@ -128,8 +128,8 @@ def api_data():
     rows  = _filter_rows(args)
     rows  = _sort_rows(rows, args.get("sort", ""), args.get("dir", "asc"))
     total = len(rows)
-    size  = min(int(args.get("size", 100)), 500)
-    page  = max(int(args.get("page", 1)), 1)
+    size  = min(max(int(args.get("size",  100) or 100), 1), 500)
+    page  = max(int(args.get("page",    1)   or 1),   1)
     pages = max(1, -(-total // size))
     start = (page - 1) * size
     return jsonify({
