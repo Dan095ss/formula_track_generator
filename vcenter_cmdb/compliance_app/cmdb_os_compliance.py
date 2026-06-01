@@ -317,6 +317,9 @@ def resolve_division(
             hit = branches_by_name.get(branch_part)
             if hit:
                 return hit
+            else:
+                log.debug("owner-name miss: %r not in by_name (sh=%s)",
+                          branch_part, shorthost_of(ci))
 
     # 3. Numeric code in shorthost → branches.number
     sh = shorthost_of(ci) or ""
@@ -388,6 +391,15 @@ def build_branch_maps(
         name = (ci.get("name") or attrs.get("name", "")).strip()
         if name:
             by_name[name.lower()] = division
+        # Also index name_for_link in case it differs from name
+        nfl = attrs.get("name_for_link", "").strip()
+        if nfl and nfl.lower() not in by_name:
+            by_name[nfl.lower()] = division
+    log.info("build_branch_maps: %d by_uuid, %d by_number, %d by_name",
+             len(by_uuid), len(by_number), len(by_name))
+    # Debug: show a few sample name keys so we can compare with owner field values
+    sample = sorted(by_name.keys())[:5]
+    log.debug("by_name sample keys: %s", sample)
     return by_uuid, by_number, by_name
 
 
