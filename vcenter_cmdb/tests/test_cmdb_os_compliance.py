@@ -480,3 +480,70 @@ def test_resolve_division_unknown_number():
     ci = _make_ci({"shorthost": "vl9999-srv"})
     by_number = {"1212": "04. дів. Урал"}
     assert resolve_division(ci, {}, by_number) is None
+
+
+# ============================================================
+# 7. Data model — division + family fields
+# ============================================================
+
+
+def test_host_record_has_division():
+    rec = HostRecord(shorthost="srv01", os_name="ubuntu 22.04", owner="IT",
+                     division="04. дів. Урал", sources={"HOST"})
+    assert rec.division == "04. дів. Урал"
+
+
+def test_host_record_division_defaults_none():
+    rec = HostRecord(shorthost="srv01", os_name=None, owner=None, sources={"HOST"})
+    assert rec.division is None
+
+
+def test_report_row_has_division_and_family():
+    r = ReportRow("srv01", "ubuntu 22.04", "IT", "HOST", Status.OK, "ok",
+                  division="04. дів. Урал", family="linux")
+    assert r.division == "04. дів. Урал"
+    assert r.family == "linux"
+
+
+def test_report_row_defaults():
+    r = ReportRow("srv01", "ubuntu", "IT", "HOST", Status.OK, "ok")
+    assert r.division == ""
+    assert r.family == ""
+
+
+def test_build_inventory_sets_division():
+    branch_ci = _make_branch_ci("branch-uuid-1", "1212", "04. дів. Урал")
+    by_uuid, by_number = build_branch_maps([branch_ci])
+    host_ci = _make_ci_with_ref({"shorthost": "srv01", "os_name": "ubuntu 22.04"}, "branch-uuid-1")
+    inv = build_inventory([host_ci], [], by_uuid, by_number)
+    assert inv["srv01"].division == "04. дів. Урал"
+
+
+def test_build_inventory_division_fallback():
+    branch_ci = _make_branch_ci("branch-uuid-2", "1212", "08. дів. Центральный")
+    by_uuid, by_number = build_branch_maps([branch_ci])
+    host_ci = _make_ci({"shorthost": "vl1212-kassa", "os_name": "ubuntu 22.04"})
+    inv = build_inventory([host_ci], [], by_uuid, by_number)
+    assert inv["vl1212-kassa"].division == "08. дів. Центральный"
+
+
+def test_build_report_sets_family_and_division():
+    rec = HostRecord(shorthost="srv01", os_name="ubuntu 22.04 lts|...", owner="IT",
+                     division="04. дів. Урал", sources={"HOST"})
+    rows = build_report({"srv01": rec})
+    assert rows[0].family == "linux"
+    assert rows[0].division == "04. дів. Урал"
+
+
+def test_write_csv_includes_division_family(tmp_path):
+    rows = [
+        ReportRow("srv01", "ubuntu 22.04", "IT", "HOST", Status.OK, "ok",
+                  division="04. дів. Урал", family="linux"),
+    ]
+    out = tmp_path / "r.csv"
+    write_csv(rows, out)
+    content = out.read_text(encoding="utf-8-sig")
+    assert "division" in content
+    assert "04. дів. Урал" in content
+    assert "family" in content
+    assert "linux" in content

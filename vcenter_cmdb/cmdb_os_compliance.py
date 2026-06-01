@@ -314,6 +314,7 @@ class HostRecord:
     os_name: str | None
     owner: str | None
     sources: set[str]
+    division: str | None = None
 
     @property
     def ke_type(self) -> str:
@@ -356,8 +357,12 @@ def build_branch_maps(
 def build_inventory(
     host_cis: Iterable[dict],
     vm_cis: Iterable[dict],
+    branches_by_uuid: dict[str, str] | None = None,
+    branches_by_number: dict[str, str] | None = None,
 ) -> dict[str, HostRecord]:
     """Build {shorthost: HostRecord}. HOST os_name and owner take priority over VM."""
+    bu = branches_by_uuid or {}
+    bn = branches_by_number or {}
     inv: dict[str, HostRecord] = {}
 
     skip_host = 0
@@ -368,6 +373,7 @@ def build_inventory(
             continue
         osn = os_name_of(ci)
         own = owner_of(ci)
+        div = resolve_division(ci, bu, bn)
         if sh in inv:
             log.warning("Duplicate HOST shorthost %r — keeping first values", sh)
             inv[sh].sources.add("HOST")
@@ -375,8 +381,11 @@ def build_inventory(
                 inv[sh].os_name = osn
             if inv[sh].owner is None and own:
                 inv[sh].owner = own
+            if inv[sh].division is None and div:
+                inv[sh].division = div
         else:
-            inv[sh] = HostRecord(shorthost=sh, os_name=osn, owner=own, sources={"HOST"})
+            inv[sh] = HostRecord(shorthost=sh, os_name=osn, owner=own,
+                                  sources={"HOST"}, division=div)
 
     if skip_host:
         log.debug("Skipped %d HOST CIs without shorthost", skip_host)
@@ -389,11 +398,13 @@ def build_inventory(
             continue
         osn = os_name_of(ci)
         own = owner_of(ci)
+        div = resolve_division(ci, bu, bn)
         if sh in inv:
             inv[sh].sources.add("VM")
             # HOST values win — do NOT overwrite
         else:
-            inv[sh] = HostRecord(shorthost=sh, os_name=osn, owner=own, sources={"VM"})
+            inv[sh] = HostRecord(shorthost=sh, os_name=osn, owner=own,
+                                  sources={"VM"}, division=div)
 
     if skip_vm:
         log.debug("Skipped %d VM CIs without shorthost", skip_vm)
@@ -413,6 +424,8 @@ class ReportRow:
     ke_type: str
     status: Status
     reason: str
+    division: str = ""
+    family: str = ""
 
 
 def build_report(inventory: dict[str, HostRecord]) -> list[ReportRow]:
@@ -426,6 +439,8 @@ def build_report(inventory: dict[str, HostRecord]) -> list[ReportRow]:
             ke_type=rec.ke_type,
             status=result.status,
             reason=result.reason,
+            division=rec.division or "",
+            family=result.family,
         ))
     rows.sort(key=lambda r: (_STATUS_PRIORITY[r.status], r.shorthost))
     return rows
@@ -457,9 +472,10 @@ def print_console_table(rows: list[ReportRow], summary: dict[str, int]) -> None:
 def write_csv(rows: list[ReportRow], path: Path) -> None:
     with open(path, "w", newline="", encoding="utf-8-sig") as f:
         writer = csv.writer(f)
-        writer.writerow(["shorthost", "os_name", "owner", "ke_type", "status", "reason"])
+        writer.writerow(["shorthost", "os_name", "owner", "division", "ke_type", "family", "status", "reason"])
         for r in rows:
-            writer.writerow([r.shorthost, r.os_name, r.owner, r.ke_type, r.status, r.reason])
+            writer.writerow([r.shorthost, r.os_name, r.owner, r.division,
+                              r.ke_type, r.family, r.status, r.reason])
 
 
 # ============================================================
