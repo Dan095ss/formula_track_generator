@@ -289,6 +289,44 @@ def api_export():
     )
 
 
+@app.route("/api/snapshots")
+def api_snapshots():
+    return jsonify(list_snapshots())
+
+
+@app.route("/api/trend")
+def api_trend():
+    return jsonify({"snapshots": list_snapshots()})
+
+
+@app.route("/api/compare")
+def api_compare():
+    id_a = request.args.get("a", "")
+    id_b = request.args.get("b", "")
+    if not id_a or not id_b:
+        return jsonify({"error": "params a and b required"}), 400
+    try:
+        snap_a = load_snapshot(id_a)
+        snap_b = load_snapshot(id_b)
+    except FileNotFoundError as e:
+        return jsonify({"error": str(e)}), 404
+    return jsonify({
+        "snap_a": {k: snap_a[k] for k in ("id", "timestamp", "source", "summary")},
+        "snap_b": {k: snap_b[k] for k in ("id", "timestamp", "source", "summary")},
+        "diff":   compare_snapshots(snap_a, snap_b),
+    })
+
+
+@app.route("/api/snapshots/import", methods=["POST"])
+def api_import_snapshot():
+    f = request.files.get("file")
+    if not f:
+        return jsonify({"error": "no file"}), 400
+    snap_id = import_csv_snapshot(f.read(), f.filename or "")
+    data    = load_snapshot(snap_id)
+    return jsonify({k: data[k] for k in ("id", "timestamp", "source", "summary")})
+
+
 _HTML = """<!DOCTYPE html>
 <html lang="ru">
 <head>

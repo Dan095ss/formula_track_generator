@@ -243,3 +243,62 @@ def test_compare_snapshots_detects_new_and_removed():
     diff = app_module.compare_snapshots(snap_a, snap_b)
     assert any(h["shorthost"] == "new_host" for h in diff["new"])
     assert any(h["shorthost"] == "old"      for h in diff["removed"])
+
+
+# ============================================================
+# New API routes — snapshots, trend, compare, import
+# ============================================================
+import io
+
+
+def test_snapshots_route_empty(client, snap_dir):
+    r = client.get("/api/snapshots")
+    assert r.status_code == 200
+    assert r.get_json() == []
+
+
+def test_snapshots_route_after_save(client, snap_dir):
+    app_module.save_snapshot(app_module._rows, source="cmdb")
+    r = client.get("/api/snapshots")
+    data = r.get_json()
+    assert len(data) == 1
+    assert data[0]["source"] == "cmdb"
+    assert "hosts" not in data[0]
+
+
+def test_trend_route(client, snap_dir):
+    app_module.save_snapshot(app_module._rows, source="cmdb")
+    r = client.get("/api/trend")
+    data = r.get_json()
+    assert "snapshots" in data
+    assert len(data["snapshots"]) == 1
+
+
+def test_compare_route(client, snap_dir):
+    id_a = app_module.save_snapshot(app_module._rows, source="cmdb")
+    import time; time.sleep(0.02)
+    from cmdb_os_compliance import ReportRow, Status
+    rows_b = list(app_module._rows)
+    rows_b[0] = ReportRow(rows_b[0].shorthost, rows_b[0].os_name, rows_b[0].owner,
+                           rows_b[0].ke_type, Status.NON_COMPLIANT, "bad",
+                           rows_b[0].division, rows_b[0].family)
+    id_b = app_module.save_snapshot(rows_b, source="cmdb")
+    r = client.get(f"/api/compare?a={id_a}&b={id_b}")
+    assert r.status_code == 200
+    data = r.get_json()
+    assert "diff" in data
+    assert len(data["diff"]["changed"]) == 1
+
+
+def test_import_route(client, snap_dir):
+    csv_data = (
+        "shorthost,os_name,owner,division,ke_type,family,status,reason\r\n"
+        "host1,ubuntu 22.04,IT,04. div,HOST,linux,OK,ok\r\n"
+    ).encode("utf-8")
+    r = client.post("/api/snapshots/import",
+                    data={"file": (io.BytesIO(csv_data), "report_20260527.csv")},
+                    content_type="multipart/form-data")
+    assert r.status_code == 200
+    data = r.get_json()
+    assert "id" in data
+    assert data["summary"]["total"] == 1
