@@ -272,6 +272,16 @@ def owner_of(ci: dict) -> str | None:
     return owner or person or None
 
 
+def ref_uuids_of(ci: dict) -> set[str]:
+    """Return set of ref UUIDs from all attrs of this CI (ignores attrs without ref)."""
+    result: set[str] = set()
+    for attr in ci.get("attrs") or []:
+        ref = attr.get("ref")
+        if ref and ref.get("uuid"):
+            result.add(ref["uuid"])
+    return result
+
+
 # ============================================================
 # Host Inventory
 # ============================================================
@@ -290,6 +300,35 @@ class HostRecord:
         if self.sources == {"VM"}:
             return "VM"
         return "HOST+VM"
+
+
+def build_branch_maps(
+    branch_cis: Iterable[dict],
+) -> tuple[dict[str, str], dict[str, str]]:
+    """Build two lookup dicts from branches CI list.
+
+    Returns:
+        by_uuid:   {branch_ci_uuid -> ter_lvl_2}
+        by_number: {branch_number_str (no leading zeros) -> ter_lvl_2}
+    """
+    by_uuid: dict[str, str] = {}
+    by_number: dict[str, str] = {}
+    for ci in branch_cis:
+        uuid = ci.get("uuid")
+        if not uuid:
+            continue
+        attrs = extract_attrs(ci)
+        division = attrs.get("ter_lvl_2", "").strip()
+        if not division:
+            continue
+        by_uuid[uuid] = division
+        number_raw = attrs.get("number", "").strip()
+        if number_raw:
+            try:
+                by_number[str(int(number_raw))] = division
+            except ValueError:
+                pass
+    return by_uuid, by_number
 
 
 def build_inventory(

@@ -353,6 +353,8 @@ def test_write_html_creates_file(tmp_path):
 
 from vcenter_cmdb.cmdb_os_compliance import (
     branch_number_from_host,
+    build_branch_maps,
+    ref_uuids_of,
 )
 
 
@@ -370,3 +372,73 @@ from vcenter_cmdb.cmdb_os_compliance import (
 ])
 def test_branch_number_from_host(shorthost, expected):
     assert branch_number_from_host(shorthost) == expected
+
+
+def _make_ci_with_ref(plain_attrs: dict[str, str], ref_uuid: str) -> dict:
+    """Build CI where one attr has a ref pointing to ref_uuid."""
+    attrs = [
+        {
+            "uuid": f"attr-{k}", "attr_type_uuid": f"type-{k}",
+            "bvalue": v,
+            "type": {"uuid": f"type-{k}", "name": k, "type": "string"},
+        }
+        for k, v in plain_attrs.items()
+    ]
+    attrs.append({
+        "uuid": "attr-ref-branch", "attr_type_uuid": "type-ref-branch",
+        "bvalue": "branch-link",
+        "type": {"uuid": "type-ref-branch", "name": "branch", "type": "ref"},
+        "ref": {"uuid": ref_uuid, "ref_type_uuid": "rt-1", "is_visible": True},
+    })
+    return {"uuid": "host-111", "name": "test-host", "attrs": attrs}
+
+
+def test_ref_uuids_of_finds_ref():
+    ci = _make_ci_with_ref({"shorthost": "srv01"}, "branch-uuid-aaa")
+    assert "branch-uuid-aaa" in ref_uuids_of(ci)
+
+
+def test_ref_uuids_of_no_refs():
+    ci = _make_ci({"shorthost": "srv01"})
+    assert ref_uuids_of(ci) == set()
+
+
+def test_ref_uuids_of_null_ref():
+    ci = {
+        "uuid": "x", "name": "y",
+        "attrs": [{"uuid": "a1", "attr_type_uuid": "t1", "bvalue": "v",
+                   "type": {"name": "foo", "type": "string"}, "ref": None}],
+    }
+    assert ref_uuids_of(ci) == set()
+
+
+def _make_branch_ci(uuid: str, number: str, ter_lvl_2: str) -> dict:
+    return {
+        "uuid": uuid,
+        "name": f"branch-{number}",
+        "attrs": [
+            {"uuid": f"a-num-{uuid}", "attr_type_uuid": "t-num", "bvalue": number,
+             "type": {"uuid": "t-num", "name": "number", "type": "string"}},
+            {"uuid": f"a-div-{uuid}", "attr_type_uuid": "t-div", "bvalue": ter_lvl_2,
+             "type": {"uuid": "t-div", "name": "ter_lvl_2", "type": "string"}},
+        ],
+    }
+
+
+def test_build_branch_maps_by_uuid():
+    branches = [_make_branch_ci("uuid-aaa", "1212", "04. дів. Урал")]
+    by_uuid, _ = build_branch_maps(branches)
+    assert by_uuid["uuid-aaa"] == "04. дів. Урал"
+
+
+def test_build_branch_maps_by_number():
+    branches = [_make_branch_ci("uuid-bbb", "020", "05. дів. Юг")]
+    _, by_number = build_branch_maps(branches)
+    assert by_number["20"] == "05. дів. Юг"   # leading zeros stripped
+
+
+def test_build_branch_maps_skips_no_division():
+    branches = [_make_branch_ci("uuid-ccc", "999", "")]  # empty ter_lvl_2
+    by_uuid, by_number = build_branch_maps(branches)
+    assert "uuid-ccc" not in by_uuid
+    assert "999" not in by_number
