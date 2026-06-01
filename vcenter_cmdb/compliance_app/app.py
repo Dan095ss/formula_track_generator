@@ -510,3 +510,23 @@ fetchData();
 </script>
 </body>
 </html>"""
+
+
+if __name__ == "__main__":
+    import sys
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s: %(message)s",
+        datefmt="%H:%M:%S",
+    )
+    try:
+        load_data()
+    except Exception as e:
+        print(f"Ошибка загрузки данных: {e}", file=sys.stderr)
+        sys.exit(1)
+
+    port = 5000
+    url  = f"http://localhost:{port}"
+    print(f"\nОткрываю браузер → {url}")
+    threading.Timer(1.2, lambda: webbrowser.open(url)).start()
+    app.run(host="127.0.0.1", port=port, debug=False)
