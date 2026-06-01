@@ -121,19 +121,22 @@ _UBUNTU_VER_RE      = re.compile(r"ubuntu\s+(\d+)\.(\d+)", re.IGNORECASE)
 _DEBIAN_VER_RE      = re.compile(r"debian[^\d]*(\d+)")
 _ALMA_VER_RE        = re.compile(r"alma\w*\s*(?:linux\s*)?(\d+)", re.IGNORECASE)
 _RHEL_VER_RE        = re.compile(r"(?:rhel|red\s*hat[^0-9]*)\s*(\d+)", re.IGNORECASE)
-_BRANCH_NUM_RE = re.compile(r'(?i)^[a-z]+-?(\d+)')
+_BRANCH_NUM_RE = re.compile(r'(?i)(?:^[a-z]+-?(\d+)|^(\d+)-)')
 
 
 def branch_number_from_host(shorthost: str) -> str | None:
     """Extract numeric branch code from shorthost, stripping leading zeros.
 
-    Examples: 'vl1212-kassa' -> '1212', 'irk020-srv' -> '20'.
-    Returns None if no leading-letters+digits pattern found.
+    Handles two formats:
+      letters-digits:  'vl1212-kassa' -> '1212', 'yug-6264-nout' -> '6264'
+      digits-suffix:   '1580-sklad3'  -> '1580', '1600-unifi'    -> '1600'
+    Returns None if neither pattern matches.
     """
     m = _BRANCH_NUM_RE.match(shorthost)
     if not m:
         return None
-    return str(int(m.group(1)))
+    code = m.group(1) or m.group(2)
+    return str(int(code))
 
 
 def _parse_win11_build(text: str) -> tuple[int, int] | None:
@@ -306,9 +309,11 @@ def resolve_division(
         if hit:
             return hit
     if branches_by_name:
-        owner_raw = extract_attrs(ci).get("owner", "").strip().lower()
-        if owner_raw:
-            return branches_by_name.get(owner_raw)
+        owner_raw = extract_attrs(ci).get("owner", "").strip()
+        # owner field format: "Branch Name / Person.AA" — use only branch name part
+        branch_part = owner_raw.split(" / ")[0].strip().lower()
+        if branch_part:
+            return branches_by_name.get(branch_part)
     return None
 
 

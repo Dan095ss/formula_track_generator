@@ -363,6 +363,7 @@ from vcenter_cmdb.cmdb_os_compliance import (
 
 
 @pytest.mark.parametrize("shorthost, expected", [
+    # letters-prefix format
     ("vl1212-kassa1",    "1212"),
     ("u1651-sklad3",     "1651"),
     ("YUG-7760-Admin",   "7760"),
@@ -371,6 +372,12 @@ from vcenter_cmdb.cmdb_os_compliance import (
     ("irk020-mngr43",    "20"),     # leading zeros stripped
     ("yrs141-bender-1",  "141"),
     ("yug-6264-nout",    "6264"),
+    # digits-prefix format (branch number first)
+    ("1580-sklad3",      "1580"),
+    ("1580-kassa99",     "1580"),
+    ("1600-unifi",       "1600"),
+    ("020-srv",          "20"),     # leading zeros stripped
+    # no match
     ("nodigits-host",    None),
     ("",                 None),
 ])
@@ -501,6 +508,20 @@ def test_resolve_division_owner_name_case_insensitive():
     ci = _make_ci({"shorthost": "yug-poisk-adm", "owner": "РОСТОВ ТЦ Poisk Home Гипер"})
     by_name = {"ростов тц poisk home гипер": "05. дів. Юг"}
     assert resolve_division(ci, {}, {}, by_name) == "05. дів. Юг"
+
+
+def test_resolve_division_owner_with_person_suffix():
+    # Real format: "Заинск ТЦ Орион / Israfilov.AR" — must strip " / Person" part
+    ci = _make_ci({"shorthost": "1580-sklad3", "owner": "Заинск ТЦ Орион / Israfilov.AR"})
+    by_name = {"заинск тц орион": "07. дів. Верхня Волга"}
+    assert resolve_division(ci, {}, {}, by_name) == "07. дів. Верхня Волга"
+
+
+def test_branch_number_digits_prefix():
+    # Host "1580-sklad3" — branch number is the prefix
+    ci = _make_ci({"shorthost": "1580-sklad3"})
+    by_number = {"1580": "07. дів. Верхня Волга"}
+    assert resolve_division(ci, {}, by_number) == "07. дів. Верхня Волга"
 
 
 # ============================================================
