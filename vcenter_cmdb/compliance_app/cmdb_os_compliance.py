@@ -121,7 +121,13 @@ _UBUNTU_VER_RE      = re.compile(r"ubuntu\s+(\d+)\.(\d+)", re.IGNORECASE)
 _DEBIAN_VER_RE      = re.compile(r"debian[^\d]*(\d+)")
 _ALMA_VER_RE        = re.compile(r"alma\w*\s*(?:linux\s*)?(\d+)", re.IGNORECASE)
 _RHEL_VER_RE        = re.compile(r"(?:rhel|red\s*hat[^0-9]*)\s*(\d+)", re.IGNORECASE)
-_BRANCH_NUM_RE = re.compile(r'(?i)(?:^-?[a-z]+-?(\d+)|^-?(\d+)(?:-|(?=[a-z])))')
+_BRANCH_NUM_RE  = re.compile(r'(?i)(?:^-?[a-z]+-?(\d+)|^-?(\d+)(?:-|(?=[a-z])))')
+_QUOTES_RE      = re.compile(r'[«»""„‟\'\"\\]')
+
+
+def _norm(s: str) -> str:
+    """Normalize branch name for matching: lowercase + strip all quote chars."""
+    return _QUOTES_RE.sub('', s).strip().lower()
 
 
 def branch_number_from_host(shorthost: str) -> str | None:
@@ -316,7 +322,7 @@ def resolve_division(
 
     # 2. Owner field → branch name (format: "Филиал / Person.AA")
     owner_raw = extract_attrs(ci).get("owner", "").strip()
-    branch_part = owner_raw.split(" / ")[0].strip().lower()
+    branch_part = _norm(owner_raw.split(" / ")[0])
     if branches_by_name and branch_part:
         hit = branches_by_name.get(branch_part)
         if hit:
@@ -396,13 +402,14 @@ def build_branch_maps(
             except ValueError:
                 pass
         # Use CI name for owner-field lookup (branch name == owner field on HOST)
+        # _norm strips quotes so "IT-группа \"Циркон\"" matches "IT-группа Циркон"
         name = (ci.get("name") or attrs.get("name", "")).strip()
         if name:
-            by_name[name.lower()] = division
+            by_name[_norm(name)] = division
         # Also index name_for_link in case it differs from name
         nfl = attrs.get("name_for_link", "").strip()
-        if nfl and nfl.lower() not in by_name:
-            by_name[nfl.lower()] = division
+        if nfl:
+            by_name.setdefault(_norm(nfl), division)
     log.info("build_branch_maps: %d by_uuid, %d by_number, %d by_name",
              len(by_uuid), len(by_number), len(by_name))
     # Debug: show a few sample name keys so we can compare with owner field values
