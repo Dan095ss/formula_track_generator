@@ -15,6 +15,8 @@ from vcenter_cmdb.cmdb_os_compliance import (
     HostRecord,
     ReportRow,
     Status,
+    branch_number_from_host,
+    build_branch_maps,
     build_inventory,
     build_report,
     classify_os,
@@ -22,6 +24,8 @@ from vcenter_cmdb.cmdb_os_compliance import (
     load_config,
     os_name_of,
     owner_of,
+    ref_uuids_of,
+    resolve_division,
     shorthost_of,
     summarize,
     write_csv,
@@ -442,3 +446,37 @@ def test_build_branch_maps_skips_no_division():
     by_uuid, by_number = build_branch_maps(branches)
     assert "uuid-ccc" not in by_uuid
     assert "999" not in by_number
+
+
+# ============================================================
+# 6. resolve_division
+# ============================================================
+
+def test_resolve_division_via_ref():
+    ci = _make_ci_with_ref({"shorthost": "srv01"}, "branch-uuid-aaa")
+    by_uuid = {"branch-uuid-aaa": "04. дів. Урал"}
+    assert resolve_division(ci, by_uuid, {}) == "04. дів. Урал"
+
+
+def test_resolve_division_fallback_hostname():
+    ci = _make_ci({"shorthost": "vl1212-kassa1"})
+    by_number = {"1212": "08. дів. Центральный"}
+    assert resolve_division(ci, {}, by_number) == "08. дів. Центральный"
+
+
+def test_resolve_division_ref_takes_priority():
+    ci = _make_ci_with_ref({"shorthost": "vl1212-kassa1"}, "branch-uuid-aaa")
+    by_uuid = {"branch-uuid-aaa": "04. дів. Урал"}
+    by_number = {"1212": "99. Other"}
+    assert resolve_division(ci, by_uuid, by_number) == "04. дів. Урал"
+
+
+def test_resolve_division_no_match():
+    ci = _make_ci({"shorthost": "nodigits-host"})
+    assert resolve_division(ci, {}, {}) is None
+
+
+def test_resolve_division_unknown_number():
+    ci = _make_ci({"shorthost": "vl9999-srv"})
+    by_number = {"1212": "04. дів. Урал"}
+    assert resolve_division(ci, {}, by_number) is None

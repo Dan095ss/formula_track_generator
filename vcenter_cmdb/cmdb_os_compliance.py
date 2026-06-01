@@ -282,6 +282,28 @@ def ref_uuids_of(ci: dict) -> set[str]:
     return result
 
 
+def resolve_division(
+    ci: dict,
+    branches_by_uuid: dict[str, str],
+    branches_by_number: dict[str, str],
+) -> str | None:
+    """Determine ter_lvl_2 (division) for a CI.
+
+    Primary:  scan CI attrs for any ref.uuid present in branches_by_uuid.
+    Fallback: extract numeric code from shorthost, look up in branches_by_number.
+    Returns None if division cannot be determined.
+    """
+    for ref_uuid in ref_uuids_of(ci):
+        division = branches_by_uuid.get(ref_uuid)
+        if division:
+            return division
+    sh = shorthost_of(ci) or ""
+    code = branch_number_from_host(sh)
+    if code:
+        return branches_by_number.get(code)
+    return None
+
+
 # ============================================================
 # Host Inventory
 # ============================================================
