@@ -479,11 +479,39 @@ def test_resolve_division_fallback_hostname():
     assert resolve_division(ci, {}, by_number) == "08. дів. Центральный"
 
 
-def test_resolve_division_ref_takes_priority():
+def test_resolve_division_attr_ref_is_last_fallback():
+    # attr-level ref is priority 4 — hostname number (priority 3) wins over it
     ci = _make_ci_with_ref({"shorthost": "vl1212-kassa1"}, "branch-uuid-aaa")
+    by_uuid   = {"branch-uuid-aaa": "04. attr ref (low priority)"}
+    by_number = {"1212": "03. number wins"}
+    assert resolve_division(ci, by_uuid, by_number) == "03. number wins"
+
+
+def test_resolve_division_attr_ref_used_when_no_number():
+    # attr-level ref works when number/owner/host_branch_map all miss
+    ci = _make_ci_with_ref({"shorthost": "nodigits-host"}, "branch-uuid-aaa")
     by_uuid = {"branch-uuid-aaa": "04. дів. Урал"}
-    by_number = {"1212": "99. Other"}
-    assert resolve_division(ci, by_uuid, by_number) == "04. дів. Урал"
+    assert resolve_division(ci, by_uuid, {}) == "04. дів. Урал"
+
+
+def test_resolve_division_host_branch_map_first():
+    # host_branch_map (from /ref/full/) takes priority over owner and number
+    ci = _make_ci({"shorthost": "1580-sklad3", "owner": "Заинск ТЦ Орион / Israfilov.AR"})
+    ci["uuid"] = "host-uuid-111"
+    host_branch_map = {"host-uuid-111": "01. ПРАВИЛЬНЫЙ"}
+    by_name   = {"заинск тц орион": "02. НЕПРАВИЛЬНЫЙ owner"}
+    by_number = {"1580": "03. НЕПРАВИЛЬНЫЙ number"}
+    result = resolve_division(ci, {}, by_number, by_name, host_branch_map)
+    assert result == "01. ПРАВИЛЬНЫЙ"
+
+
+def test_resolve_division_owner_before_number():
+    # owner match (priority 2) wins over hostname number (priority 3)
+    ci = _make_ci({"shorthost": "1580-sklad3", "owner": "Заинск ТЦ Орион / Israfilov.AR"})
+    by_name   = {"заинск тц орион": "02. owner wins"}
+    by_number = {"1580": "03. number loses"}
+    result = resolve_division(ci, {}, by_number, by_name)
+    assert result == "02. owner wins"
 
 
 def test_resolve_division_no_match():
