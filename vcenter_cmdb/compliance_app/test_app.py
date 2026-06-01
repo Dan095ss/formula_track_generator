@@ -140,3 +140,45 @@ def test_index_route(client):
     r = client.get("/")
     assert r.status_code == 200
     assert b"CMDB" in r.data
+
+
+# ============================================================
+# Snapshot persistence
+# ============================================================
+import json as _json
+from pathlib import Path
+
+
+@pytest.fixture
+def snap_dir(tmp_path, monkeypatch):
+    """Point SNAPSHOTS_DIR at a temp dir for isolation."""
+    monkeypatch.setattr(app_module, "SNAPSHOTS_DIR", tmp_path)
+    return tmp_path
+
+
+def test_save_snapshot_creates_file(snap_dir):
+    snap_id = app_module.save_snapshot(app_module._rows, source="cmdb")
+    files = list(snap_dir.glob("*.json"))
+    assert len(files) == 1
+    data = _json.loads(files[0].read_text(encoding="utf-8"))
+    assert data["id"] == snap_id
+    assert data["source"] == "cmdb"
+    assert data["summary"]["total"] == 4
+    assert "srv01" in data["hosts"]
+
+
+def test_list_snapshots_returns_sorted(snap_dir):
+    app_module.save_snapshot(app_module._rows, source="cmdb")
+    import time; time.sleep(0.02)
+    app_module.save_snapshot(app_module._rows, source="csv")
+    snaps = app_module.list_snapshots()
+    assert len(snaps) == 2
+    assert snaps[0]["timestamp"] > snaps[1]["timestamp"]   # newest first
+    assert "hosts" not in snaps[0]                          # no hosts in list
+
+
+def test_load_snapshot_has_hosts(snap_dir):
+    snap_id = app_module.save_snapshot(app_module._rows, source="cmdb")
+    data = app_module.load_snapshot(snap_id)
+    assert "hosts" in data
+    assert data["hosts"]["srv01"]["status"] == "OK"

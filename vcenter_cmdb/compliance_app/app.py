@@ -6,9 +6,12 @@ Usage:
 """
 import csv
 import io
+import json
 import logging
 import threading
 import webbrowser
+from datetime import datetime
+from pathlib import Path
 
 from flask import Flask, Response, jsonify, request
 
@@ -31,6 +34,60 @@ app = Flask(__name__)
 _rows: list[ReportRow] = []
 _summary: dict[str, int] = {"total": 0, "OK": 0, "WARNING": 0, "NON_COMPLIANT": 0, "UNKNOWN": 0}
 _divisions: list[str] = []
+
+
+# ── Snapshot storage ─────────────────────────────────────────
+SNAPSHOTS_DIR = Path(__file__).parent / "snapshots"
+_STATUS_PRIO  = {"NON_COMPLIANT": 0, "WARNING": 1, "UNKNOWN": 2, "OK": 3}
+
+
+def save_snapshot(rows: list[ReportRow], source: str = "cmdb") -> str:
+    """Serialise rows to JSON and save to SNAPSHOTS_DIR. Returns snapshot id."""
+    SNAPSHOTS_DIR.mkdir(exist_ok=True)
+    now     = datetime.now()
+    snap_id = now.strftime("%Y%m%d_%H%M%S_%f")
+    payload = {
+        "id":        snap_id,
+        "timestamp": now.isoformat(timespec="milliseconds"),
+        "source":    source,
+        "summary":   summarize(rows),
+        "hosts": {
+            r.shorthost: {
+                "status":   r.status.value,
+                "os_name":  r.os_name,
+                "owner":    r.owner,
+                "division": r.division,
+                "family":   r.family,
+                "reason":   r.reason,
+            }
+            for r in rows
+        },
+    }
+    (SNAPSHOTS_DIR / f"{snap_id}.json").write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+    log.info("Snapshot saved: %s (%d hosts)", snap_id, len(rows))
+    return snap_id
+
+
+def list_snapshots() -> list[dict]:
+    """Return snapshot metadata (no hosts), sorted newest-first."""
+    if not SNAPSHOTS_DIR.exists():
+        return []
+    result = []
+    for p in sorted(SNAPSHOTS_DIR.glob("*.json"), reverse=True):
+        try:
+            d = json.loads(p.read_text(encoding="utf-8"))
+            result.append({k: d[k] for k in ("id", "timestamp", "source", "summary")})
+        except Exception:
+            pass
+    return result
+
+
+def load_snapshot(snap_id: str) -> dict:
+    """Load full snapshot (including hosts) by id."""
+    path = SNAPSHOTS_DIR / f"{snap_id}.json"
+    return json.loads(path.read_text(encoding="utf-8"))
 
 
 # ── Helpers ──────────────────────────────────────────────────
