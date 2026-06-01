@@ -121,7 +121,7 @@ _UBUNTU_VER_RE      = re.compile(r"ubuntu\s+(\d+)\.(\d+)", re.IGNORECASE)
 _DEBIAN_VER_RE      = re.compile(r"debian[^\d]*(\d+)")
 _ALMA_VER_RE        = re.compile(r"alma\w*\s*(?:linux\s*)?(\d+)", re.IGNORECASE)
 _RHEL_VER_RE        = re.compile(r"(?:rhel|red\s*hat[^0-9]*)\s*(\d+)", re.IGNORECASE)
-_BRANCH_NUM_RE = re.compile(r'(?i)(?:^[a-z]+-?(\d+)|^(\d+)-)')
+_BRANCH_NUM_RE = re.compile(r'(?i)(?:^-?[a-z]+-?(\d+)|^-?(\d+)-)')
 
 
 def branch_number_from_host(shorthost: str) -> str | None:
