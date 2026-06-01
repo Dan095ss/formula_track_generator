@@ -347,16 +347,21 @@ def resolve_division(
             else:
                 log.debug("[div] %s  M1-ref MISS uuid=%s", sh, ci_uuid)
 
-    # 2. Owner field → branch name (format: "Филиал / Person.AA")
+    # 2. Owner field → branch name
+    # Format can be: "Branch / Person" OR "Branch1 / Branch2 / Person1 / Person2"
+    # Try each segment that looks like a dept name (not a login with dot-no-space)
     owner_raw = extract_attrs(ci).get("owner", "").strip()
-    branch_part = _norm(owner_raw.split(" / ")[0])
-    if branches_by_name and branch_part:
-        hit = branches_by_name.get(branch_part)
-        if hit:
-            log.debug("[div] %s  M2-owner %r -> %s", sh, branch_part, hit)
-            return hit
-        else:
-            log.debug("[div] %s  M2-owner MISS %r", sh, branch_part)
+    _is_login = lambda s: bool(re.search(r'\w\.\w', s) and ' ' not in s.strip())
+    owner_segments = [_norm(p) for p in owner_raw.split(" / ")
+                      if p.strip() and not _is_login(p.strip())]
+    branch_part = owner_segments[0] if owner_segments else ""
+    if branches_by_name and owner_segments:
+        for seg in owner_segments:
+            hit = branches_by_name.get(seg)
+            if hit:
+                log.debug("[div] %s  M2-owner %r -> %s", sh, seg, hit)
+                return hit
+        log.debug("[div] %s  M2-owner MISS segments=%r", sh, owner_segments)
 
     # 3. owner_person sAMAccountName → ACCOUNT.department → branch
     if account_division_map:
