@@ -30,7 +30,7 @@ from urllib3.exceptions import InsecureRequestWarning
 urllib3.disable_warnings(InsecureRequestWarning)
 
 log = logging.getLogger(__name__)
-
+ 
 
 # ============================================================
 # Exceptions
@@ -286,11 +286,13 @@ def resolve_division(
     ci: dict,
     branches_by_uuid: dict[str, str],
     branches_by_number: dict[str, str],
+    branches_by_name: dict[str, str] | None = None,
 ) -> str | None:
     """Determine ter_lvl_2 (division) for a CI.
 
-    Primary:  scan CI attrs for any ref.uuid present in branches_by_uuid.
-    Fallback: extract numeric code from shorthost, look up in branches_by_number.
+    1. Scan CI attrs for any ref.uuid present in branches_by_uuid.
+    2. Extract numeric code from shorthost, look up in branches_by_number.
+    3. Match owner field text against branch names (branches_by_name).
     Returns None if division cannot be determined.
     """
     for ref_uuid in ref_uuids_of(ci):
@@ -300,7 +302,13 @@ def resolve_division(
     sh = shorthost_of(ci) or ""
     code = branch_number_from_host(sh)
     if code:
-        return branches_by_number.get(code)
+        hit = branches_by_number.get(code)
+        if hit:
+            return hit
+    if branches_by_name:
+        owner_raw = extract_attrs(ci).get("owner", "").strip().lower()
+        if owner_raw:
+            return branches_by_name.get(owner_raw)
     return None
 
 
@@ -327,15 +335,17 @@ class HostRecord:
 
 def build_branch_maps(
     branch_cis: Iterable[dict],
-) -> tuple[dict[str, str], dict[str, str]]:
-    """Build two lookup dicts from branches CI list.
+) -> tuple[dict[str, str], dict[str, str], dict[str, str]]:
+    """Build three lookup dicts from branches CI list.
 
     Returns:
         by_uuid:   {branch_ci_uuid -> ter_lvl_2}
         by_number: {branch_number_str (no leading zeros) -> ter_lvl_2}
+        by_name:   {branch_name_lower -> ter_lvl_2}  for owner-field matching
     """
     by_uuid: dict[str, str] = {}
     by_number: dict[str, str] = {}
+    by_name: dict[str, str] = {}
     for ci in branch_cis:
         uuid = ci.get("uuid")
         if not uuid:
@@ -351,7 +361,11 @@ def build_branch_maps(
                 by_number[str(int(number_raw))] = division
             except ValueError:
                 pass
-    return by_uuid, by_number
+        # Use CI name for owner-field lookup (branch name == owner field on HOST)
+        name = (ci.get("name") or attrs.get("name", "")).strip()
+        if name:
+            by_name[name.lower()] = division
+    return by_uuid, by_number, by_name
 
 
 def build_inventory(
@@ -359,10 +373,12 @@ def build_inventory(
     vm_cis: Iterable[dict],
     branches_by_uuid: dict[str, str] | None = None,
     branches_by_number: dict[str, str] | None = None,
+    branches_by_name: dict[str, str] | None = None,
 ) -> dict[str, HostRecord]:
     """Build {shorthost: HostRecord}. HOST os_name and owner take priority over VM."""
     bu = branches_by_uuid or {}
     bn = branches_by_number or {}
+    bname = branches_by_name or {}
     inv: dict[str, HostRecord] = {}
 
     skip_host = 0
@@ -373,7 +389,7 @@ def build_inventory(
             continue
         osn = os_name_of(ci)
         own = owner_of(ci)
-        div = resolve_division(ci, bu, bn)
+        div = resolve_division(ci, bu, bn, bname)
         if sh in inv:
             log.warning("Duplicate HOST shorthost %r — keeping first values", sh)
             inv[sh].sources.add("HOST")
@@ -398,7 +414,7 @@ def build_inventory(
             continue
         osn = os_name_of(ci)
         own = owner_of(ci)
-        div = resolve_division(ci, bu, bn)
+        div = resolve_division(ci, bu, bn, bname)
         if sh in inv:
             inv[sh].sources.add("VM")
             # HOST values win — do NOT overwrite
@@ -1090,16 +1106,17 @@ def main(argv: list[str] | None = None) -> int:
         vm_uuid     = client.get_ci_type_uuid("VM")
         branch_uuid = client.get_ci_type_uuid("branches")
         log.info("Pre-loading branches for division lookup…")
-        branches_by_uuid, branches_by_number = build_branch_maps(
+        branches_by_uuid, branches_by_number, branches_by_name = build_branch_maps(
             client.iter_cis(branch_uuid)
         )
-        log.info("Loaded %d branch UUIDs, %d branch numbers",
-                 len(branches_by_uuid), len(branches_by_number))
+        log.info("Loaded %d branch UUIDs, %d branch numbers, %d branch names",
+                 len(branches_by_uuid), len(branches_by_number), len(branches_by_name))
         inventory = build_inventory(
             client.iter_cis(host_uuid),
             client.iter_cis(vm_uuid),
             branches_by_uuid,
             branches_by_number,
+            branches_by_name,
         )
         rows = build_report(inventory)
         summary = summarize(rows)

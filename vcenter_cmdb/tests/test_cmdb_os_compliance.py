@@ -431,21 +431,29 @@ def _make_branch_ci(uuid: str, number: str, ter_lvl_2: str) -> dict:
 
 def test_build_branch_maps_by_uuid():
     branches = [_make_branch_ci("uuid-aaa", "1212", "04. дів. Урал")]
-    by_uuid, _ = build_branch_maps(branches)
+    by_uuid, _, _n = build_branch_maps(branches)
     assert by_uuid["uuid-aaa"] == "04. дів. Урал"
 
 
 def test_build_branch_maps_by_number():
     branches = [_make_branch_ci("uuid-bbb", "020", "05. дів. Юг")]
-    _, by_number = build_branch_maps(branches)
+    _, by_number, _n = build_branch_maps(branches)
     assert by_number["20"] == "05. дів. Юг"   # leading zeros stripped
+
+
+def test_build_branch_maps_by_name():
+    branches = [_make_branch_ci("uuid-ddd", "239", "05. дів. Юг")]
+    # _make_branch_ci sets ci["name"] = "branch-239"
+    _, _, by_name = build_branch_maps(branches)
+    assert by_name["branch-239"] == "05. дів. Юг"
 
 
 def test_build_branch_maps_skips_no_division():
     branches = [_make_branch_ci("uuid-ccc", "999", "")]  # empty ter_lvl_2
-    by_uuid, by_number = build_branch_maps(branches)
+    by_uuid, by_number, by_name = build_branch_maps(branches)
     assert "uuid-ccc" not in by_uuid
     assert "999" not in by_number
+    assert "branch-999" not in by_name
 
 
 # ============================================================
@@ -482,6 +490,19 @@ def test_resolve_division_unknown_number():
     assert resolve_division(ci, {}, by_number) is None
 
 
+def test_resolve_division_via_owner_name():
+    # Hosts like "yug-poisk-adm" have no numeric code but owner = branch name
+    ci = _make_ci({"shorthost": "yug-poisk-adm", "owner": "Ростов ТЦ Poisk Home Гипер"})
+    by_name = {"ростов тц poisk home гипер": "05. дів. Юг"}
+    assert resolve_division(ci, {}, {}, by_name) == "05. дів. Юг"
+
+
+def test_resolve_division_owner_name_case_insensitive():
+    ci = _make_ci({"shorthost": "yug-poisk-adm", "owner": "РОСТОВ ТЦ Poisk Home Гипер"})
+    by_name = {"ростов тц poisk home гипер": "05. дів. Юг"}
+    assert resolve_division(ci, {}, {}, by_name) == "05. дів. Юг"
+
+
 # ============================================================
 # 7. Data model — division + family fields
 # ============================================================
@@ -513,7 +534,7 @@ def test_report_row_defaults():
 
 def test_build_inventory_sets_division():
     branch_ci = _make_branch_ci("branch-uuid-1", "1212", "04. дів. Урал")
-    by_uuid, by_number = build_branch_maps([branch_ci])
+    by_uuid, by_number, by_name = build_branch_maps([branch_ci])
     host_ci = _make_ci_with_ref({"shorthost": "srv01", "os_name": "ubuntu 22.04"}, "branch-uuid-1")
     inv = build_inventory([host_ci], [], by_uuid, by_number)
     assert inv["srv01"].division == "04. дів. Урал"
@@ -521,7 +542,7 @@ def test_build_inventory_sets_division():
 
 def test_build_inventory_division_fallback():
     branch_ci = _make_branch_ci("branch-uuid-2", "1212", "08. дів. Центральный")
-    by_uuid, by_number = build_branch_maps([branch_ci])
+    by_uuid, by_number, by_name = build_branch_maps([branch_ci])
     host_ci = _make_ci({"shorthost": "vl1212-kassa", "os_name": "ubuntu 22.04"})
     inv = build_inventory([host_ci], [], by_uuid, by_number)
     assert inv["vl1212-kassa"].division == "08. дів. Центральный"
