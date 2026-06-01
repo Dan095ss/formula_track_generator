@@ -463,7 +463,7 @@ def print_console_table(rows: list[ReportRow], summary: dict[str, int]) -> None:
     for r in rows:
         cells = [
             r.shorthost[:COL[0]], r.os_name[:COL[1]], r.owner[:COL[2]],
-            (r.division or "")[:COL[3]], r.ke_type[:COL[4]], r.status,
+            (r.division or "")[:COL[3]], r.ke_type[:COL[4]], r.status.value,
         ]
         print("  ".join(str(c).ljust(w) for c, w in zip(cells, COL)))
     print(sep)
