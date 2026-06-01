@@ -492,7 +492,7 @@ _HTML_TEMPLATE = """\
 <style>
   * {{ box-sizing: border-box; margin: 0; padding: 0; }}
   body {{ font-family: 'Segoe UI', Arial, sans-serif; background: #f0f2f5; color: #1a1a2e; }}
-  .page {{ max-width: 1400px; margin: 0 auto; padding: 24px 20px; }}
+  .page {{ max-width: 1500px; margin: 0 auto; padding: 24px 20px; }}
 
   .header {{ background: linear-gradient(135deg, #1a1a2e 0%, #16213e 60%, #0f3460 100%);
              color: #fff; border-radius: 12px; padding: 28px 32px; margin-bottom: 24px; }}
@@ -513,32 +513,55 @@ _HTML_TEMPLATE = """\
   .card.unk   .num {{ color: #6b7280; }}
 
   .filterbar {{ background: #fff; border-radius: 10px; padding: 14px 20px;
-                margin-bottom: 16px; box-shadow: 0 1px 4px rgba(0,0,0,.08);
-                display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }}
-  .filterbar input {{ flex: 1; min-width: 200px; padding: 8px 12px; border: 1px solid #d1d5db;
-                      border-radius: 6px; font-size: 14px; outline: none; }}
-  .filterbar input:focus {{ border-color: #0f3460; box-shadow: 0 0 0 3px rgba(15,52,96,.12); }}
-  .filter-btn {{ padding: 8px 16px; border: 1px solid #d1d5db; border-radius: 6px;
+                margin-bottom: 8px; box-shadow: 0 1px 4px rgba(0,0,0,.08); }}
+  .filter-row {{ display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 8px; }}
+  .filter-row:last-child {{ margin-bottom: 0; }}
+  .filter-label {{ font-size: 11px; font-weight: 600; color: #6b7280;
+                   text-transform: uppercase; letter-spacing: .5px; white-space: nowrap; min-width: 60px; }}
+  .filterbar input[type=text] {{ flex: 1; min-width: 200px; padding: 8px 12px;
+                                  border: 1px solid #d1d5db; border-radius: 6px;
+                                  font-size: 14px; outline: none; }}
+  .filterbar input[type=text]:focus {{ border-color: #0f3460; box-shadow: 0 0 0 3px rgba(15,52,96,.12); }}
+  .filter-btn {{ padding: 7px 14px; border: 1px solid #d1d5db; border-radius: 6px;
                  background: #fff; cursor: pointer; font-size: 13px; font-weight: 500;
                  transition: all .15s; white-space: nowrap; }}
   .filter-btn:hover {{ background: #f3f4f6; }}
   .filter-btn.active {{ background: #0f3460; color: #fff; border-color: #0f3460; }}
+  .filter-btn.fam-ws.active  {{ background: #7c3aed; border-color: #7c3aed; }}
+  .filter-btn.fam-wc.active  {{ background: #2563eb; border-color: #2563eb; }}
+  .filter-btn.fam-lx.active  {{ background: #059669; border-color: #059669; }}
+  .filter-btn.fam-unk.active {{ background: #6b7280; border-color: #6b7280; }}
+  .sel {{ padding: 7px 10px; border: 1px solid #d1d5db; border-radius: 6px;
+          font-size: 13px; cursor: pointer; background: #fff; max-width: 280px; }}
   .page-size-sel {{ padding: 7px 10px; border: 1px solid #d1d5db; border-radius: 6px;
                     font-size: 13px; cursor: pointer; background: #fff; }}
+  .where-input {{ font-family: 'Consolas', monospace; font-size: 13px; }}
+  .where-error {{ font-size: 12px; color: #dc2626; margin-left: 8px; }}
+  .export-btn {{ padding: 7px 16px; border: 1px solid #0f3460; border-radius: 6px;
+                 background: #0f3460; color: #fff; cursor: pointer; font-size: 13px;
+                 font-weight: 500; white-space: nowrap; transition: background .15s; }}
+  .export-btn:hover {{ background: #16213e; }}
 
   .table-wrap {{ background: #fff; border-radius: 10px; overflow: hidden;
                  box-shadow: 0 1px 4px rgba(0,0,0,.08); }}
   table {{ width: 100%; border-collapse: collapse; font-size: 13.5px; }}
   thead th {{ background: #1a1a2e; color: #fff; padding: 12px 14px; text-align: left;
               font-weight: 600; font-size: 12px; letter-spacing: .5px;
-              text-transform: uppercase; white-space: nowrap; }}
+              text-transform: uppercase; white-space: nowrap;
+              cursor: pointer; user-select: none; }}
+  thead th:hover {{ background: #16213e; }}
+  thead th .sort-icon {{ margin-left: 4px; opacity: .5; }}
+  thead th.sort-asc .sort-icon::after  {{ content: ' ▲'; opacity: 1; }}
+  thead th.sort-desc .sort-icon::after {{ content: ' ▼'; opacity: 1; }}
   tbody tr {{ border-bottom: 1px solid #f0f0f0; transition: background .1s; }}
   tbody tr:last-child {{ border-bottom: none; }}
   td {{ padding: 10px 14px; vertical-align: top; }}
   td.host {{ font-family: 'Consolas', monospace; font-size: 13px; font-weight: 600; color: #0f3460; }}
   td.os   {{ color: #374151; }}
   td.own  {{ color: #4b5563; font-size: 13px; }}
+  td.div  {{ color: #6b7280; font-size: 12px; }}
   td.ke   {{ font-size: 12px; color: #6b7280; white-space: nowrap; }}
+  td.fam  {{ font-size: 11px; color: #9ca3af; white-space: nowrap; }}
   td.reason {{ font-size: 12px; color: #6b7280; }}
 
   .row-fail    {{ background: #fff5f5; }}
@@ -598,27 +621,55 @@ _HTML_TEMPLATE = """\
   </div>
 
   <div class="filterbar">
-    <input type="text" id="search" placeholder="Поиск по хосту, ОС или владельцу…" oninput="applyFilters()">
-    <button class="filter-btn active" data-status="ALL"           onclick="setStatus(this)">Все</button>
-    <button class="filter-btn"        data-status="NON_COMPLIANT" onclick="setStatus(this)">Не соответствует</button>
-    <button class="filter-btn"        data-status="WARNING"       onclick="setStatus(this)">Условно</button>
-    <button class="filter-btn"        data-status="OK"            onclick="setStatus(this)">OK</button>
-    <button class="filter-btn"        data-status="UNKNOWN"       onclick="setStatus(this)">Нет данных</button>
-    <select class="page-size-sel" onchange="changePageSize(this.value)">
-      <option value="50">50 / стр.</option>
-      <option value="100" selected>100 / стр.</option>
-      <option value="200">200 / стр.</option>
-      <option value="500">500 / стр.</option>
-    </select>
+    <div class="filter-row">
+      <span class="filter-label">Статус</span>
+      <button class="filter-btn active" data-status="ALL"           onclick="setStatus(this)">Все</button>
+      <button class="filter-btn"        data-status="NON_COMPLIANT" onclick="setStatus(this)">Не соответствует</button>
+      <button class="filter-btn"        data-status="WARNING"       onclick="setStatus(this)">Условно</button>
+      <button class="filter-btn"        data-status="OK"            onclick="setStatus(this)">OK</button>
+      <button class="filter-btn"        data-status="UNKNOWN"       onclick="setStatus(this)">Нет данных</button>
+    </div>
+    <div class="filter-row">
+      <span class="filter-label">ОС</span>
+      <button class="filter-btn active fam-all" data-fam="ALL"            onclick="setFamily(this)">Все</button>
+      <button class="filter-btn fam-ws"         data-fam="windows_server" onclick="setFamily(this)">Windows Server</button>
+      <button class="filter-btn fam-wc"         data-fam="windows_client" onclick="setFamily(this)">Windows Client</button>
+      <button class="filter-btn fam-lx"         data-fam="linux"          onclick="setFamily(this)">Linux</button>
+      <button class="filter-btn fam-unk"        data-fam="unknown"        onclick="setFamily(this)">Неизвестно</button>
+    </div>
+    <div class="filter-row">
+      <span class="filter-label">Дивизион</span>
+      <select class="sel" id="div-sel" onchange="applyFilters()">
+        <option value="">Все дивизионы</option>
+      </select>
+      <span class="filter-label" style="margin-left:12px">Владелец</span>
+      <select class="sel" id="owner-sel" onchange="applyFilters()">
+        <option value="">Все владельцы</option>
+      </select>
+      <select class="page-size-sel" onchange="changePageSize(this.value)" style="margin-left:auto">
+        <option value="50">50 / стр.</option>
+        <option value="100" selected>100 / стр.</option>
+        <option value="200">200 / стр.</option>
+        <option value="500">500 / стр.</option>
+      </select>
+    </div>
+    <div class="filter-row">
+      <span class="filter-label">Поиск</span>
+      <input type="text" id="search" placeholder="Текстовый поиск по хосту, ОС, владельцу…" oninput="applyFilters()">
+    </div>
+    <div class="filter-row">
+      <span class="filter-label">WHERE</span>
+      <input type="text" class="where-input" id="where"
+             placeholder='status = "NON_COMPLIANT" AND division LIKE "04%"'
+             oninput="applyWhere()" style="flex:1;min-width:300px">
+      <span class="where-error" id="where-err"></span>
+      <button class="export-btn" onclick="exportCSV()">&#11015; Скачать CSV</button>
+    </div>
   </div>
 
   <div class="table-wrap">
     <table>
-      <thead>
-        <tr>
-          <th>Хост</th><th>ОС</th><th>Владелец</th><th>Тип КЕ</th><th>Статус</th><th>Причина</th>
-        </tr>
-      </thead>
+      <thead id="thead"></thead>
       <tbody id="tbody"></tbody>
     </table>
     <div class="pagination">
@@ -643,111 +694,293 @@ var BADGE = {{
   'NON_COMPLIANT': '<span class="badge fail">NON_COMPLIANT</span>',
   'UNKNOWN':       '<span class="badge unknown">UNKNOWN</span>'
 }};
+var FAMILY_LABEL = {{
+  'windows_server': 'Win Server', 'windows_client': 'Win Client',
+  'linux': 'Linux', 'unknown': '&#8212;'
+}};
+var COLS = [
+  {{f:'shorthost', label:'Хост',     cls:'host'}},
+  {{f:'os_name',   label:'ОС',       cls:'os'}},
+  {{f:'owner',     label:'Владелец', cls:'own'}},
+  {{f:'division',  label:'Дивизион', cls:'div'}},
+  {{f:'ke_type',   label:'Тип КЕ',  cls:'ke'}},
+  {{f:'family',    label:'Семейство',cls:'fam'}},
+  {{f:'status',    label:'Статус',   cls:''}},
+  {{f:'reason',    label:'Причина',  cls:'reason'}}
+];
 
 var filtered = DATA.slice();
 var currentPage = 1;
 var pageSize = 100;
 var activeStatus = 'ALL';
+var activeFamily = 'ALL';
+var sortField = null;
+var sortDir = 0;
+var compiledWhere = null;
 
-function esc(s) {{
-  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+function initDropdowns() {{
+  var divs = Array.from(new Set(DATA.map(function(r){{ return r.division||''; }})))
+                  .filter(Boolean).sort();
+  var owners = Array.from(new Set(DATA.map(function(r){{ return r.owner||''; }})))
+                    .filter(Boolean).sort();
+  var dsel = document.getElementById('div-sel');
+  divs.forEach(function(d) {{
+    var o = document.createElement('option'); o.value = d; o.textContent = d; dsel.appendChild(o);
+  }});
+  var osel = document.getElementById('owner-sel');
+  owners.forEach(function(o) {{
+    var el = document.createElement('option'); el.value = o; el.textContent = o; osel.appendChild(el);
+  }});
+}}
+
+function renderHeaders() {{
+  var html = '<tr>';
+  COLS.forEach(function(col) {{
+    var cls = '';
+    if (sortField === col.f) cls = sortDir === 1 ? ' sort-asc' : ' sort-desc';
+    html += '<th class="' + cls + '" onclick="toggleSort(\'' + col.f + '\')">' +
+            col.label + '<span class="sort-icon"></span></th>';
+  }});
+  html += '</tr>';
+  document.getElementById('thead').innerHTML = html;
+}}
+
+function toggleSort(field) {{
+  if (sortField === field) {{
+    if (sortDir === 1) {{ sortDir = -1; }}
+    else if (sortDir === -1) {{ sortDir = 0; sortField = null; }}
+    else {{ sortDir = 1; }}
+  }} else {{
+    sortField = field; sortDir = 1;
+  }}
+  applyFilters();
+}}
+
+function sortFiltered() {{
+  if (!sortField || sortDir === 0) return;
+  var f = sortField, d = sortDir;
+  filtered.sort(function(a, b) {{
+    var av = String(a[f]||'').toLowerCase();
+    var bv = String(b[f]||'').toLowerCase();
+    return av < bv ? -d : av > bv ? d : 0;
+  }});
+}}
+
+var TK = {{IDENT:'I',STR:'S',EQ:'=',NEQ:'!=',LIKE:'L',AND:'&',OR:'|',NOT:'!',LP:'(',RP:')',EOF:'E'}};
+
+function tokenize(s) {{
+  var tok = [], i = 0;
+  while (i < s.length) {{
+    if (/\\s/.test(s[i])) {{ i++; continue; }}
+    if (s[i]==='(') {{ tok.push({{t:TK.LP}}); i++; continue; }}
+    if (s[i]===')') {{ tok.push({{t:TK.RP}}); i++; continue; }}
+    if (s[i]==='!'&&s[i+1]==='=') {{ tok.push({{t:TK.NEQ}}); i+=2; continue; }}
+    if (s[i]==='=') {{ tok.push({{t:TK.EQ}}); i++; continue; }}
+    if (s[i]==='"') {{
+      var j=i+1; while(j<s.length&&s[j]!=='"')j++;
+      tok.push({{t:TK.STR,v:s.slice(i+1,j)}}); i=j+1; continue;
+    }}
+    var j=i; while(j<s.length&&/[\\w.]/.test(s[j]))j++;
+    var w=s.slice(i,j).toUpperCase();
+    if(w==='AND')  tok.push({{t:TK.AND}});
+    else if(w==='OR')  tok.push({{t:TK.OR}});
+    else if(w==='NOT') tok.push({{t:TK.NOT}});
+    else if(w==='LIKE')tok.push({{t:TK.LIKE}});
+    else               tok.push({{t:TK.IDENT,v:s.slice(i,j).toLowerCase()}});
+    i=j;
+  }}
+  tok.push({{t:TK.EOF}}); return tok;
+}}
+
+function mkParser(tokens) {{
+  var pos=0;
+  function peek()    {{ return tokens[pos]; }}
+  function consume() {{ return tokens[pos++]; }}
+  function parseOr() {{
+    var left=parseAnd();
+    while(peek().t===TK.OR) {{
+      consume();
+      (function(l,r){{ left=function(x){{return l(x)||r(x);}}; }})(left,parseAnd());
+    }}
+    return left;
+  }}
+  function parseAnd() {{
+    var left=parseNot();
+    while(peek().t===TK.AND) {{
+      consume();
+      (function(l,r){{ left=function(x){{return l(x)&&r(x);}}; }})(left,parseNot());
+    }}
+    return left;
+  }}
+  function parseNot() {{
+    if(peek().t===TK.NOT){{ consume(); var inner=parsePrimary(); return function(x){{return !inner(x);}}; }}
+    return parsePrimary();
+  }}
+  function parsePrimary() {{
+    if(peek().t===TK.LP){{ consume(); var e=parseOr(); if(peek().t===TK.RP)consume(); return e; }}
+    var field=consume().v||'';
+    var op=consume().t;
+    var val=(consume().v||'').toLowerCase();
+    if(op===TK.EQ)  return function(r){{return String(r[field]||'').toLowerCase()===val;}};
+    if(op===TK.NEQ) return function(r){{return String(r[field]||'').toLowerCase()!==val;}};
+    if(op===TK.LIKE){{
+      var pat=val.replace(/[.+^${{}}()|[\\]\\\\]/g,'\\\\$&').replace(/%/g,'.*').replace(/_/g,'.');
+      var re=new RegExp('^'+pat+'$');
+      return function(r){{return re.test(String(r[field]||'').toLowerCase());}};
+    }}
+    return function(){{return true;}};
+  }}
+  return parseOr;
+}}
+
+function compileWhere(query) {{
+  if(!query.trim()) return null;
+  try {{ return mkParser(tokenize(query))(); }}
+  catch(e) {{ return 'error'; }}
+}}
+
+function applyWhere() {{
+  var q=document.getElementById('where').value;
+  compiledWhere=compileWhere(q);
+  document.getElementById('where-err').textContent=(compiledWhere==='error')?'&#9888; Ошибка синтаксиса':'';
+  applyFilters();
+}}
+
+function exportCSV() {{
+  var cols=['shorthost','os_name','owner','division','ke_type','family','status','reason'];
+  var lines=[cols.join(',')];
+  filtered.forEach(function(r) {{
+    lines.push(cols.map(function(c) {{
+      var v=String(r[c]||'');
+      if(v.indexOf(',')>-1||v.indexOf('"')>-1||v.indexOf('\\n')>-1) v='"'+v.replace(/"/g,'""')+'"';
+      return v;
+    }}).join(','));
+  }});
+  var blob=new Blob(['\\uFEFF'+lines.join('\\n')],{{type:'text/csv;charset=utf-8;'}});
+  var url=URL.createObjectURL(blob);
+  var a=document.createElement('a'); a.href=url; a.download='os_compliance_filtered.csv'; a.click();
+  URL.revokeObjectURL(url);
 }}
 
 function render() {{
-  var tbody = document.getElementById('tbody');
-  var start = (currentPage - 1) * pageSize;
-  var page  = filtered.slice(start, start + pageSize);
-  if (filtered.length === 0) {{
-    tbody.innerHTML = '<tr><td colspan="6" class="empty">Ничего не найдено</td></tr>';
+  var tbody=document.getElementById('tbody');
+  var start=(currentPage-1)*pageSize;
+  var page=filtered.slice(start,start+pageSize);
+  if(filtered.length===0) {{
+    tbody.innerHTML='<tr><td colspan="8" class="empty">Ничего не найдено</td></tr>';
   }} else {{
-    tbody.innerHTML = page.map(function(r) {{
-      return '<tr class="' + ROW_CLASS[r.status] + '">' +
-        '<td class="host">' + esc(r.shorthost) + '</td>' +
-        '<td class="os">'   + esc(r.os_name)   + '</td>' +
-        '<td class="own">'  + esc(r.owner)      + '</td>' +
-        '<td class="ke">'   + esc(r.ke_type)    + '</td>' +
-        '<td>' + BADGE[r.status] + '</td>' +
-        '<td class="reason">' + esc(r.reason)   + '</td>' +
+    tbody.innerHTML=page.map(function(r) {{
+      return '<tr class="'+ROW_CLASS[r.status]+'">' +
+        '<td class="host">'+esc(r.shorthost)+'</td>' +
+        '<td class="os">'+esc(r.os_name)+'</td>' +
+        '<td class="own">'+esc(r.owner)+'</td>' +
+        '<td class="div">'+esc(r.division||'&#8212;')+'</td>' +
+        '<td class="ke">'+esc(r.ke_type)+'</td>' +
+        '<td class="fam">'+esc(FAMILY_LABEL[r.family]||r.family)+'</td>' +
+        '<td>'+BADGE[r.status]+'</td>' +
+        '<td class="reason">'+esc(r.reason)+'</td>' +
         '</tr>';
     }}).join('');
   }}
+  renderHeaders();
   renderPagination();
 }}
 
 function renderPagination() {{
-  var total = filtered.length;
-  var totalPages = Math.max(1, Math.ceil(total / pageSize));
-  var start = total === 0 ? 0 : (currentPage - 1) * pageSize + 1;
-  var end   = Math.min(currentPage * pageSize, total);
-  document.getElementById('pag-info').textContent =
-    'Показано ' + start + '–' + end + ' из ' + total;
-
-  var html = '';
-  html += '<button class="pag-btn" onclick="goTo(1)" ' + (currentPage===1?'disabled':'') + '>&laquo;</button>';
-  html += '<button class="pag-btn" onclick="goTo(' + (currentPage-1) + ')" ' + (currentPage===1?'disabled':'') + '>&lsaquo;</button>';
-
-  var pages = pagesToShow(currentPage, totalPages);
-  var prev = null;
+  var total=filtered.length;
+  var totalPages=Math.max(1,Math.ceil(total/pageSize));
+  var start=total===0?0:(currentPage-1)*pageSize+1;
+  var end=Math.min(currentPage*pageSize,total);
+  document.getElementById('pag-info').textContent='Показано '+start+'–'+end+' из '+total;
+  var html='';
+  html+='<button class="pag-btn" onclick="goTo(1)" '+(currentPage===1?'disabled':'')+'>&laquo;</button>';
+  html+='<button class="pag-btn" onclick="goTo('+(currentPage-1)+')" '+(currentPage===1?'disabled':'')+'>&lsaquo;</button>';
+  var pages=pagesToShow(currentPage,totalPages),prev=null;
   pages.forEach(function(p) {{
-    if (prev !== null && p - prev > 1) html += '<span class="pag-ellipsis">…</span>';
-    html += '<button class="pag-btn' + (p===currentPage?' active':'') + '" onclick="goTo(' + p + ')">' + p + '</button>';
-    prev = p;
+    if(prev!==null&&p-prev>1) html+='<span class="pag-ellipsis">&hellip;</span>';
+    html+='<button class="pag-btn'+(p===currentPage?' active':'')+'" onclick="goTo('+p+')">'+p+'</button>';
+    prev=p;
   }});
-
-  html += '<button class="pag-btn" onclick="goTo(' + (currentPage+1) + ')" ' + (currentPage===totalPages?'disabled':'') + '>&rsaquo;</button>';
-  html += '<button class="pag-btn" onclick="goTo(' + totalPages + ')" ' + (currentPage===totalPages?'disabled':'') + '>&raquo;</button>';
-  document.getElementById('pag-controls').innerHTML = html;
+  html+='<button class="pag-btn" onclick="goTo('+(currentPage+1)+')" '+(currentPage===totalPages?'disabled':'')+'>&rsaquo;</button>';
+  html+='<button class="pag-btn" onclick="goTo('+totalPages+')" '+(currentPage===totalPages?'disabled':'')+'>&raquo;</button>';
+  document.getElementById('pag-controls').innerHTML=html;
 }}
 
-function pagesToShow(cur, total) {{
-  var pages = [];
-  var delta = 2;
-  for (var p = 1; p <= total; p++) {{
-    if (p === 1 || p === total || (p >= cur - delta && p <= cur + delta)) pages.push(p);
+function pagesToShow(cur,total) {{
+  var pages=[],delta=2;
+  for(var p=1;p<=total;p++) {{
+    if(p===1||p===total||(p>=cur-delta&&p<=cur+delta)) pages.push(p);
   }}
   return pages;
 }}
 
 function goTo(p) {{
-  var totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
-  currentPage = Math.max(1, Math.min(p, totalPages));
+  var totalPages=Math.max(1,Math.ceil(filtered.length/pageSize));
+  currentPage=Math.max(1,Math.min(p,totalPages));
   render();
-  window.scrollTo({{top: 0, behavior: 'smooth'}});
+  window.scrollTo({{top:0,behavior:'smooth'}});
+}}
+
+function esc(s) {{
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }}
 
 function applyFilters() {{
-  var q = document.getElementById('search').value.toLowerCase();
-  filtered = DATA.filter(function(r) {{
-    var matchS = activeStatus === 'ALL' || r.status === activeStatus;
-    var matchQ = !q || (r.shorthost+r.os_name+r.owner+r.reason).toLowerCase().includes(q);
-    return matchS && matchQ;
+  var q=(document.getElementById('search').value||'').toLowerCase();
+  var div=document.getElementById('div-sel').value;
+  var own=document.getElementById('owner-sel').value;
+  var wh=(compiledWhere&&compiledWhere!=='error')?compiledWhere:null;
+  filtered=DATA.filter(function(r) {{
+    if(activeStatus!=='ALL'&&r.status!==activeStatus) return false;
+    if(activeFamily!=='ALL'&&r.family!==activeFamily) return false;
+    if(div&&r.division!==div) return false;
+    if(own&&r.owner!==own)    return false;
+    if(q&&!(r.shorthost+r.os_name+r.owner+r.division+r.reason).toLowerCase().includes(q)) return false;
+    if(wh&&!wh(r)) return false;
+    return true;
   }});
-  currentPage = 1;
+  sortFiltered();
+  currentPage=1;
   render();
 }}
 
 function setStatus(btn) {{
-  document.querySelectorAll('.filter-btn').forEach(function(b) {{ b.classList.remove('active'); }});
+  document.querySelectorAll('.filter-btn[data-status]').forEach(function(b){{b.classList.remove('active');}});
   btn.classList.add('active');
-  activeStatus = btn.dataset.status;
+  activeStatus=btn.dataset.status;
   applyFilters();
 }}
 
 function filterByStatus(status) {{
-  activeStatus = status;
-  document.querySelectorAll('.filter-btn').forEach(function(b) {{
-    b.classList.toggle('active', b.dataset.status === status);
+  activeStatus=status;
+  document.querySelectorAll('.filter-btn[data-status]').forEach(function(b){{
+    b.classList.toggle('active',b.dataset.status===status);
+  }});
+  applyFilters();
+}}
+
+function setFamily(btn) {{
+  document.querySelectorAll('.filter-btn[data-fam]').forEach(function(b){{b.classList.remove('active');}});
+  btn.classList.add('active');
+  activeFamily=btn.dataset.fam;
+  applyFilters();
+}}
+
+function filterByFamily(fam) {{
+  activeFamily=fam;
+  document.querySelectorAll('.filter-btn[data-fam]').forEach(function(b){{
+    b.classList.toggle('active',b.dataset.fam===fam);
   }});
   applyFilters();
 }}
 
 function changePageSize(val) {{
-  pageSize = parseInt(val);
-  currentPage = 1;
-  render();
+  pageSize=parseInt(val); currentPage=1; render();
 }}
 
-render();
+initDropdowns();
+renderHeaders();
+applyFilters();
 </script>
 </body>
 </html>
@@ -757,8 +990,16 @@ render();
 def write_html(rows: list[ReportRow], summary: dict[str, int], path: Path) -> None:
     import json as _json
     data = [
-        {"shorthost": r.shorthost, "os_name": r.os_name, "owner": r.owner,
-         "ke_type": r.ke_type, "status": r.status, "reason": r.reason}
+        {
+            "shorthost": r.shorthost,
+            "os_name":   r.os_name,
+            "owner":     r.owner,
+            "division":  r.division,
+            "ke_type":   r.ke_type,
+            "family":    r.family,
+            "status":    r.status,
+            "reason":    r.reason,
+        }
         for r in rows
     ]
     content = _HTML_TEMPLATE.format(

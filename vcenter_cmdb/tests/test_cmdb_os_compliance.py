@@ -547,3 +547,55 @@ def test_write_csv_includes_division_family(tmp_path):
     assert "04. дів. Урал" in content
     assert "family" in content
     assert "linux" in content
+
+
+# ============================================================
+# 8. HTML extended
+# ============================================================
+
+
+def _html_rows():
+    return [
+        ReportRow("srv01", "ubuntu 22.04 lts|...", "IT-отдел A / Ivanov.AA", "HOST",
+                  Status.OK, "OK: Ubuntu 22.04 LTS", division="04. дів. Урал", family="linux"),
+        ReportRow("vm01", "windows server 2019|", "IT-отдел B", "VM",
+                  Status.WARNING, "WARNING: WS 2019", division="05. дів. Юг", family="windows_server"),
+        ReportRow("vm02", "windows 10 pro|22h2", "", "VM",
+                  Status.NON_COMPLIANT, "NON_COMPLIANT: Win10", division="", family="windows_client"),
+    ]
+
+
+def test_write_html_includes_division_and_family(tmp_path):
+    rows = _html_rows()
+    summary = {"total": 3, "OK": 1, "WARNING": 1, "NON_COMPLIANT": 1, "UNKNOWN": 0}
+    out = tmp_path / "r.html"
+    write_html(rows, summary, out)
+    content = out.read_text(encoding="utf-8")
+    assert '"division"' in content
+    assert '"family"' in content
+    assert "04. дів. Урал" in content
+    assert "windows_server" in content
+    assert "linux" in content
+
+
+def test_write_html_has_os_family_buttons(tmp_path):
+    rows = _html_rows()
+    summary = {"total": 3, "OK": 1, "WARNING": 1, "NON_COMPLIANT": 1, "UNKNOWN": 0}
+    out = tmp_path / "r.html"
+    write_html(rows, summary, out)
+    content = out.read_text(encoding="utf-8")
+    assert "windows_server" in content
+    assert "windows_client" in content
+    assert "linux" in content
+    assert "filterByFamily" in content
+
+
+def test_write_html_has_export_and_where(tmp_path):
+    rows = _html_rows()
+    summary = {"total": 3, "OK": 1, "WARNING": 1, "NON_COMPLIANT": 1, "UNKNOWN": 0}
+    out = tmp_path / "r.html"
+    write_html(rows, summary, out)
+    content = out.read_text(encoding="utf-8")
+    assert "exportCSV" in content
+    assert "compileWhere" in content
+    assert "Скачать CSV" in content
