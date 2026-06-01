@@ -63,11 +63,11 @@ def test_load_config_default_url(monkeypatch):
     assert cfg.cmdb_url == "https://cmdb.dns-shop.ru"
 
 
-def test_load_config_missing_token_raises(monkeypatch):
+def test_load_config_token_has_default(monkeypatch):
     monkeypatch.setenv("CMDB_URL", "https://cmdb.example.com")
     monkeypatch.delenv("CMDB_TOKEN", raising=False)
-    with pytest.raises(SystemExit):
-        load_config([])
+    cfg = load_config([])
+    assert cfg.token  # token has a hardcoded default
 
 
 # ============================================================

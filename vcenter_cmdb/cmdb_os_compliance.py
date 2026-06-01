@@ -71,7 +71,7 @@ def load_config(argv: list[str] | None = None) -> Config:
 
     parser = argparse.ArgumentParser(description="CMDB OS Compliance Checker")
     parser.add_argument("--url", default=os.environ.get("CMDB_URL", "https://cmdb.dns-shop.ru"), help="CMDB base URL")
-    parser.add_argument("--token", default=os.environ.get("CMDB_TOKEN"), help="CMDB API token")
+    parser.add_argument("--token", default=os.environ.get("CMDB_TOKEN", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJzZXZyeXVrLmRhQGRucy1zaG9wLnJ1Iiwic2NvcGUiOlsidXNlciIsImFkbWluIl0sImV4cCI6NDQ1ODY4MzYxMSwiaWF0IjoxNzgwMjgzNjExLCJ0eXBlIjoiYWNjZXNzIn0.qa4DaMEBzG4NVW2Cp1vmHufxZ50RQ9gf0vG-eeb2D34"), help="CMDB API token")
     parser.add_argument("--page-size", type=int, default=500)
     parser.add_argument("--output", type=Path, default=None, help="CSV output path")
     parser.add_argument("--html", type=Path, default=None, help="HTML output path")
@@ -645,10 +645,6 @@ _HTML_TEMPLATE = """\
       <select class="sel" id="div-sel" onchange="applyFilters()">
         <option value="">Все дивизионы</option>
       </select>
-      <span class="filter-label" style="margin-left:12px">Владелец</span>
-      <select class="sel" id="owner-sel" onchange="applyFilters()">
-        <option value="">Все владельцы</option>
-      </select>
       <select class="page-size-sel" onchange="changePageSize(this.value)" style="margin-left:auto">
         <option value="50">50 / стр.</option>
         <option value="100" selected>100 / стр.</option>
@@ -724,15 +720,9 @@ var compiledWhere = null;
 function initDropdowns() {{
   var divs = Array.from(new Set(DATA.map(function(r){{ return r.division||''; }})))
                   .filter(Boolean).sort();
-  var owners = Array.from(new Set(DATA.map(function(r){{ return r.owner||''; }})))
-                    .filter(Boolean).sort();
   var dsel = document.getElementById('div-sel');
   divs.forEach(function(d) {{
     var o = document.createElement('option'); o.value = d; o.textContent = d; dsel.appendChild(o);
-  }});
-  var osel = document.getElementById('owner-sel');
-  owners.forEach(function(o) {{
-    var el = document.createElement('option'); el.value = o; el.textContent = o; osel.appendChild(el);
   }});
 }}
 
@@ -931,13 +921,11 @@ function esc(s) {{
 function applyFilters() {{
   var q=(document.getElementById('search').value||'').toLowerCase();
   var div=document.getElementById('div-sel').value;
-  var own=document.getElementById('owner-sel').value;
   var wh=(compiledWhere&&compiledWhere!=='error')?compiledWhere:null;
   filtered=DATA.filter(function(r) {{
     if(activeStatus!=='ALL'&&r.status!==activeStatus) return false;
     if(activeFamily!=='ALL'&&r.family!==activeFamily) return false;
     if(div&&r.division!==div) return false;
-    if(own&&r.owner!==own)    return false;
     if(q&&!(r.shorthost+r.os_name+r.owner+r.division+r.reason).toLowerCase().includes(q)) return false;
     if(wh&&!wh(r)) return false;
     return true;
