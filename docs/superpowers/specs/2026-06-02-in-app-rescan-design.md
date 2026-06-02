@@ -37,6 +37,8 @@ their data. Only one scan runs at a time.
 - **Transport:** polling (Approach A). No SSE/WebSocket, no new dependencies.
 - **Startup:** unchanged — blocking initial load. The rescan button is for
   refresh only.
+- **No emoji:** UI glyphs use inline SVG icons, not emoji (project preference).
+  New elements introduced by this feature (scan button, banner) follow this.
 
 ## Architecture
 
@@ -139,9 +141,10 @@ def _run_scan() -> None:
 
 ### Frontend (the `_HTML` string in `app.py`)
 
-- **Scan button** `🔄 Сканировать` placed under the header. Click shows a
-  lightweight `confirm()` ("Запустить полное сканирование CMDB?") because the
-  scan is heavy and shared, then `POST /api/scan/start`. A 409 response is
+- **Scan button** "Сканировать" placed under the header, with an inline SVG
+  refresh icon (two circular arrows) — no emoji, per project UI preference. Click
+  shows a lightweight `confirm()` ("Запустить полное сканирование CMDB?") because
+  the scan is heavy and shared, then `POST /api/scan/start`. A 409 response is
   ignored (someone else already started; the banner will show it anyway).
 - **Global banner** under the header, hidden by default. While `running`:
   visible on every tab, showing the phase label, a CSS-width progress bar driven
