@@ -427,3 +427,11 @@ def test_scan_status_route(client, reset_scan_state):
     assert r.status_code == 200
     data = r.get_json()
     assert "running" in data and "percent" in data and "data_version" in data
+
+
+def test_index_contains_scan_ui(client):
+    r = client.get("/")
+    body = r.data.decode("utf-8")
+    assert "scan-btn" in body
+    assert "startScan" in body
+    assert "pollScanStatus" in body

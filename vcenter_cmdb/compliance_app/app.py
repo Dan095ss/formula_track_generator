@@ -555,6 +555,24 @@ _HTML = """<!DOCTYPE html>
   .loading { padding: 60px; text-align: center; color: #9ca3af; font-size: 14px; }
   .empty   { padding: 40px; text-align: center; color: #9ca3af; font-size: 14px; }
   .footer  { text-align: center; margin-top: 20px; font-size: 12px; color: #9ca3af; }
+  .scanbar { display:flex; justify-content:flex-end; margin-bottom:12px; }
+  .scan-btn { display:inline-flex; align-items:center; gap:8px; padding:8px 16px;
+              border:1px solid #0f3460; border-radius:8px; background:#0f3460;
+              color:#fff; cursor:pointer; font-size:13px; font-weight:600; transition:background .15s; }
+  .scan-btn:hover:not(:disabled) { background:#16213e; }
+  .scan-btn:disabled { opacity:.5; cursor:default; }
+  .scan-btn svg { display:block; }
+  .scan-banner { display:none; background:#fff; border-radius:10px; padding:14px 20px;
+                 margin-bottom:16px; box-shadow:0 1px 4px rgba(0,0,0,.08); border-left:4px solid #0f3460; }
+  .scan-banner.error { border-left-color:#dc2626; }
+  .scan-banner-row { display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; }
+  .scan-phase { font-size:13px; font-weight:600; color:#1a1a2e; }
+  .scan-pct { font-size:13px; color:#6b7280; font-variant-numeric:tabular-nums; }
+  .scan-track { height:8px; background:#e5e7eb; border-radius:4px; overflow:hidden; }
+  .scan-fill { height:100%; width:0%; background:linear-gradient(90deg,#0f3460,#2563eb);
+               border-radius:4px; transition:width .4s ease; }
+  .scan-retry { padding:4px 10px; font-size:12px; border:1px solid #dc2626;
+                border-radius:6px; background:#fff; color:#dc2626; cursor:pointer; }
 </style>
 </head>
 <body>
@@ -562,6 +580,19 @@ _HTML = """<!DOCTYPE html>
   <div class="header">
     <h1>CMDB OS Compliance</h1>
     <div class="meta" id="meta">\u0417\u0430\u0433\u0440\u0443\u0437\u043a\u0430 \u0434\u0430\u043d\u043d\u044b\u0445\u2026</div>
+  </div>
+  <div class="scanbar">
+    <button class="scan-btn" id="scan-btn" onclick="startScan()">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
+      \u0421\u043a\u0430\u043d\u0438\u0440\u043e\u0432\u0430\u0442\u044c
+    </button>
+  </div>
+  <div class="scan-banner" id="scan-banner">
+    <div class="scan-banner-row">
+      <span class="scan-phase" id="scan-phase"></span>
+      <span class="scan-pct" id="scan-pct"></span>
+    </div>
+    <div class="scan-track"><div class="scan-fill" id="scan-fill"></div></div>
   </div>
   <div class="tabs">
     <button class="tab-btn active" onclick="showTab('table')">📋 \u0422\u0430\u0431\u043b\u0438\u0446\u0430</button>
@@ -730,7 +761,10 @@ async function fetchStats(){
 async function fetchDivisions(){
   const d=await(await fetch('/api/divisions')).json();
   const sel=document.getElementById('div-sel');
+  const cur=sel.value;
+  sel.innerHTML='<option value="">Все дивизионы</option>';
   d.divisions.forEach(v=>{const o=document.createElement('option');o.value=v;o.textContent=v;sel.appendChild(o);});
+  if(cur)sel.value=cur;
 }
 async function fetchData(){
   const p=new URLSearchParams({page:state.page,size:state.size});
@@ -894,6 +928,45 @@ function setDiffFilter(btn){
   document.querySelectorAll('[data-diff]').forEach(b=>b.classList.toggle('active',b.dataset.diff===_diffFilter));
   renderDiff();
 }
+let _lastDataVersion=null;
+async function startScan(){
+  if(!confirm('Запустить полное сканирование CMDB?'))return;
+  document.getElementById('scan-btn').disabled=true;
+  try{await fetch('/api/scan/start',{method:'POST'});}catch(e){}
+  pollScanStatus();
+}
+async function pollScanStatus(){
+  let s;
+  try{s=await(await fetch('/api/scan/status')).json();}catch(e){return;}
+  if(_lastDataVersion===null)_lastDataVersion=s.data_version;
+  const banner=document.getElementById('scan-banner');
+  const btn=document.getElementById('scan-btn');
+  const phase=document.getElementById('scan-phase');
+  const pct=document.getElementById('scan-pct');
+  const fill=document.getElementById('scan-fill');
+  if(s.running){
+    banner.style.display='block';banner.classList.remove('error');btn.disabled=true;
+    phase.textContent=(s.phase_index?('['+s.phase_index+'/'+s.phase_total+'] '):'')+(s.phase||'Подготовка…')+(s.detail?(' — '+s.detail):'');
+    pct.textContent=(s.percent||0)+'%';
+    fill.style.width=(s.percent||0)+'%';
+  }else{
+    btn.disabled=false;
+    if(s.error){
+      banner.style.display='block';banner.classList.add('error');
+      phase.textContent='Ошибка сканирования: '+s.error;
+      pct.innerHTML='<button class="scan-retry" onclick="startScan()">Повторить</button>';
+      fill.style.width='0%';
+    }else if(s.data_version>_lastDataVersion){
+      _lastDataVersion=s.data_version;
+      banner.style.display='none';
+      fetchStats();fetchDivisions();fetchData();
+    }else{
+      banner.style.display='none';
+    }
+  }
+}
+setInterval(pollScanStatus,1000);
+pollScanStatus();
 fetchStats();fetchDivisions();fetchData();
 </script>
 </body>
