@@ -257,28 +257,30 @@ def _row_to_dict(r: ReportRow) -> dict:
 
 # ── Data loading ─────────────────────────────────────────────
 
-def load_data() -> None:
+def load_data(progress: "ScanProgress | None" = None) -> None:
     global _rows, _summary, _divisions
+    if progress is None:
+        progress = ScanProgress()
     config = load_config([])
     client = CmdbClient(config)
 
-    print("Connecting to CMDB…")
+    progress.phase(1)                       # Авторизация
     client.check_auth()
 
-    print("Loading branches…")
+    progress.phase(2)                       # Загрузка филиалов
     branch_uuid = client.get_ci_type_uuid("branches")
     bu, bn, bname = build_branch_maps(client.iter_cis(branch_uuid))
-    print(f"  {len(bu)} branches loaded, {len(bname)} names indexed")
+    log.info("%d branches loaded, %d names indexed", len(bu), len(bname))
 
-    print("Building host→branch map from graph refs…")
-    hbm = client.build_host_branch_map(bu)
-    print(f"  host_branch_map: {len(hbm)} entries")
+    progress.phase(3)                       # Карта host→branch
+    hbm = client.build_host_branch_map(bu, on_progress=progress.tick)
+    log.info("host_branch_map: %d entries", len(hbm))
 
-    print("Loading ACCOUNT CIs for sAMAccountName → department lookup…")
+    progress.phase(4)                       # Загрузка ACCOUNT
     try:
         account_uuid = client.get_ci_type_uuid("ACCOUNT")
         adm = build_account_division_map(client.iter_cis(account_uuid), bname)
-        print(f"  account_division_map: {len(adm)} entries")
+        log.info("account_division_map: %d entries", len(adm))
     except Exception as e:
         log.warning("Could not load ACCOUNT CIs: %s", e)
         adm = {}
@@ -286,21 +288,20 @@ def load_data() -> None:
     host_uuid = client.get_ci_type_uuid("HOST")
     vm_uuid   = client.get_ci_type_uuid("VM")
 
-    print("Loading HOST and VM CIs…")
-    inventory = build_inventory(
-        client.iter_cis(host_uuid),
-        client.iter_cis(vm_uuid),
-        bu, bn, bname, hbm, adm,
-    )
-    print(f"  {len(inventory)} unique KEs")
+    progress.phase(5)                       # Загрузка HOST
+    host_cis = list(client.iter_cis(host_uuid, on_page=progress.tick))
+    progress.phase(6)                       # Загрузка VM
+    vm_cis = list(client.iter_cis(vm_uuid, on_page=progress.tick))
 
-    _rows     = build_report(inventory)
-    _summary  = summarize(_rows)
+    inventory = build_inventory(host_cis, vm_cis, bu, bn, bname, hbm, adm)
+    log.info("%d unique KEs", len(inventory))
+
+    progress.phase(7)                       # Сборка отчёта
+    _rows      = build_report(inventory)
+    _summary   = summarize(_rows)
     _divisions = sorted({r.division for r in _rows if r.division})
-
-    nc = _summary["NON_COMPLIANT"]
-    ok = _summary["OK"]
-    print(f"Done — {len(_rows)} KEs | NON_COMPLIANT: {nc} | OK: {ok}")
+    log.info("Done — %d KEs | NON_COMPLIANT: %d | OK: %d",
+             len(_rows), _summary["NON_COMPLIANT"], _summary["OK"])
     save_snapshot(_rows, source="cmdb")
 
 
@@ -870,7 +871,7 @@ if __name__ == "__main__":
         datefmt="%H:%M:%S",
     )
     try:
-        load_data()
+        load_data(ScanProgress())
     except Exception as e:
         print(f"Ошибка загрузки данных: {e}", file=sys.stderr)
         sys.exit(1)
