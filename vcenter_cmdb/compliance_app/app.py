@@ -819,7 +819,8 @@ function resBadge(v){
   else if(/(\u0440\u0435\u0437\u0435\u0440\u0432|\u0445\u0440\u0430\u043d|\u0441\u043a\u043b\u0430\u0434|storage|reserve|spare|stock)/.test(s))cls='reserve';
   return '<span class="rbadge '+cls+'">'+esc(v)+'</span>';
 }
-function pingHost(shorthost,el){
+function pingHost(el){
+  const shorthost=el.textContent;
   const cell=el.parentElement.querySelector('.ping-res');
   cell.innerHTML='<span class="ping-badge wait">…</span>';
   fetch('/api/ping',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({shorthost})})
@@ -882,7 +883,7 @@ function renderRows(rows){
   if(!rows.length){tbody.innerHTML='<tr><td class="empty" colspan="9">\u041d\u0438\u0447\u0435\u0433\u043e \u043d\u0435 \u043d\u0430\u0439\u0434\u0435\u043d\u043e</td></tr>';return;}
   tbody.innerHTML=rows.map(r=>
     '<tr class="'+(ROW_CLASS[r.status]||'')+'">' +
-    '<td class="host"><span class="host-link" title="\u041f\u0438\u043d\u0433" onclick="pingHost(\''+esc(r.shorthost)+'\',this)">'+esc(r.shorthost)+'</span><span class="ping-res"></span></td><td class="os">'+esc(r.os_name)+'</td>' +
+    '<td class="host"><span class="host-link" title="\u041f\u0438\u043d\u0433" onclick="pingHost(this)">'+esc(r.shorthost)+'</span><span class="ping-res"></span></td><td class="os">'+esc(r.os_name)+'</td>' +
     '<td class="own">'+esc(r.owner)+'</td><td class="div">'+esc(r.division||'\u2014')+'</td>' +
     '<td class="ke">'+esc(r.ke_type)+'</td><td class="fam">'+esc(FAM[r.family]||r.family)+'</td>' +
     '<td class="rstatus">'+resBadge(r.resource_status)+'</td>' +
