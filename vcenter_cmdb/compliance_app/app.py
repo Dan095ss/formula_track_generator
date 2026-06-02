@@ -8,6 +8,9 @@ import csv
 import io
 import json
 import logging
+import re
+import socket
+import subprocess
 import threading
 import webbrowser
 from datetime import datetime
@@ -368,6 +371,41 @@ def api_resource_statuses():
     return jsonify({"resource_statuses": vals})
 
 
+_RTT_RE = re.compile(r"time[=<]\s*(\d+)\s*ms", re.IGNORECASE)
+
+
+@app.route("/api/ping", methods=["POST"])
+def api_ping():
+    body = request.get_json(silent=True) or {}
+    shorthost = (body.get("shorthost") or "").strip()
+    if not shorthost:
+        return jsonify({"error": "shorthost обязателен"}), 400
+    if not any(r.shorthost == shorthost for r in _rows):
+        return jsonify({"error": "Хост не найден в инвентаре"}), 400
+
+    try:
+        ip = socket.gethostbyname(shorthost)
+    except socket.gaierror as e:
+        return jsonify({"alive": False, "ip": None, "rtt_ms": None,
+                        "error": f"DNS: {e}"})
+
+    try:
+        proc = subprocess.run(
+            ["ping", "-n", "1", "-w", "1000", ip],
+            capture_output=True, text=True, shell=False, timeout=5,
+        )
+    except (subprocess.TimeoutExpired, OSError) as e:
+        return jsonify({"alive": False, "ip": ip, "rtt_ms": None,
+                        "error": str(e)})
+
+    alive = proc.returncode == 0
+    rtt = None
+    m = _RTT_RE.search(proc.stdout or "")
+    if m:
+        rtt = int(m.group(1))
+    return jsonify({"alive": alive, "ip": ip, "rtt_ms": rtt, "error": None})
+
+
 @app.route("/api/data")
 def api_data():
     args  = request.args
@@ -589,6 +627,13 @@ _HTML = """<!DOCTYPE html>
   .rbadge.reserve { background:#fef9c3; color:#854d0e; }
   .rbadge.other   { background:#e0e7ff; color:#3730a3; }
   .rbadge.none    { background:#f3f4f6; color:#9ca3af; }
+  .host-link { cursor:pointer; border-bottom:1px dashed #94a3b8; }
+  .host-link:hover { color:#2563eb; border-bottom-color:#2563eb; }
+  .ping-res { margin-left:6px; }
+  .ping-badge { display:inline-block; padding:1px 6px; border-radius:8px; font-size:10px; font-weight:700; }
+  .ping-badge.wait { background:#e0e7ff; color:#3730a3; }
+  .ping-badge.on   { background:#dcfce7; color:#166534; }
+  .ping-badge.off  { background:#fee2e2; color:#991b1b; }
 </style>
 </head>
 <body>
@@ -770,6 +815,16 @@ function resBadge(v){
   else if(/(\u0440\u0435\u0437\u0435\u0440\u0432|\u0445\u0440\u0430\u043d|\u0441\u043a\u043b\u0430\u0434|storage|reserve|spare|stock)/.test(s))cls='reserve';
   return '<span class="rbadge '+cls+'">'+esc(v)+'</span>';
 }
+function pingHost(shorthost,el){
+  const cell=el.parentElement.querySelector('.ping-res');
+  cell.innerHTML='<span class="ping-badge wait">…</span>';
+  fetch('/api/ping',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({shorthost})})
+    .then(r=>r.json()).then(d=>{
+      if(d.error&&d.ip===null&&!d.alive){cell.innerHTML='<span class="ping-badge off" title="'+esc(d.error)+'">DNS?</span>';return;}
+      if(d.alive){const rtt=(d.rtt_ms!=null)?(d.rtt_ms+' ms'):'online';cell.innerHTML='<span class="ping-badge on" title="'+esc(d.ip||'')+'">'+rtt+'</span>';}
+      else{cell.innerHTML='<span class="ping-badge off" title="'+esc(d.ip||'')+'">offline</span>';}
+    }).catch(()=>{cell.innerHTML='<span class="ping-badge off">ERR</span>';});
+}
 const BADGE={
   OK:'<span class="badge ok">OK</span>',WARNING:'<span class="badge warning">WARNING</span>',
   NON_COMPLIANT:'<span class="badge fail">NON_COMPLIANT</span>',UNKNOWN:'<span class="badge unknown">UNKNOWN</span>',
@@ -823,7 +878,7 @@ function renderRows(rows){
   if(!rows.length){tbody.innerHTML='<tr><td class="empty" colspan="9">\u041d\u0438\u0447\u0435\u0433\u043e \u043d\u0435 \u043d\u0430\u0439\u0434\u0435\u043d\u043e</td></tr>';return;}
   tbody.innerHTML=rows.map(r=>
     '<tr class="'+(ROW_CLASS[r.status]||'')+'">' +
-    '<td class="host">'+esc(r.shorthost)+'</td><td class="os">'+esc(r.os_name)+'</td>' +
+    '<td class="host"><span class="host-link" title="\u041f\u0438\u043d\u0433" onclick="pingHost(\''+esc(r.shorthost)+'\',this)">'+esc(r.shorthost)+'</span><span class="ping-res"></span></td><td class="os">'+esc(r.os_name)+'</td>' +
     '<td class="own">'+esc(r.owner)+'</td><td class="div">'+esc(r.division||'\u2014')+'</td>' +
     '<td class="ke">'+esc(r.ke_type)+'</td><td class="fam">'+esc(FAM[r.family]||r.family)+'</td>' +
     '<td class="rstatus">'+resBadge(r.resource_status)+'</td>' +

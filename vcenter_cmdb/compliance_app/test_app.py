@@ -478,3 +478,84 @@ def test_index_contains_resource_status_ui(client):
     assert "rstatus-sel" in body
     assert "fetchResourceStatuses" in body
     assert "resource_status" in body
+
+
+# ============================================================
+# Feature 3: on-demand ping probe
+# ============================================================
+
+def test_ping_rejects_host_not_in_inventory(client):
+    r = client.post("/api/ping", json={"shorthost": "evil.example.com"})
+    assert r.status_code == 400
+    assert "error" in r.get_json()
+
+
+def test_ping_rejects_missing_shorthost(client):
+    r = client.post("/api/ping", json={})
+    assert r.status_code == 400
+
+
+def test_ping_alive(client, monkeypatch):
+    monkeypatch.setattr(app_module.socket, "gethostbyname", lambda h: "10.0.0.5")
+
+    class _R:
+        returncode = 0
+        stdout = "Reply from 10.0.0.5: bytes=32 time=12ms TTL=128"
+    monkeypatch.setattr(app_module.subprocess, "run", lambda *a, **k: _R())
+
+    r = client.post("/api/ping", json={"shorthost": "srv01"})
+    assert r.status_code == 200
+    data = r.get_json()
+    assert data["alive"] is True
+    assert data["ip"] == "10.0.0.5"
+    assert data["rtt_ms"] == 12
+
+
+def test_ping_offline(client, monkeypatch):
+    monkeypatch.setattr(app_module.socket, "gethostbyname", lambda h: "10.0.0.5")
+
+    class _R:
+        returncode = 1
+        stdout = "Request timed out."
+    monkeypatch.setattr(app_module.subprocess, "run", lambda *a, **k: _R())
+
+    r = client.post("/api/ping", json={"shorthost": "srv01"})
+    assert r.status_code == 200
+    assert r.get_json()["alive"] is False
+
+
+def test_ping_dns_failure(client, monkeypatch):
+    def _boom(h):
+        raise app_module.socket.gaierror("name not found")
+    monkeypatch.setattr(app_module.socket, "gethostbyname", _boom)
+
+    r = client.post("/api/ping", json={"shorthost": "srv01"})
+    assert r.status_code == 200
+    data = r.get_json()
+    assert data["alive"] is False
+    assert data["ip"] is None
+    assert data["error"]
+
+
+def test_ping_uses_shell_false(client, monkeypatch):
+    monkeypatch.setattr(app_module.socket, "gethostbyname", lambda h: "10.0.0.5")
+    captured = {}
+
+    class _R:
+        returncode = 0
+        stdout = "time=5ms"
+    def _run(args, **kwargs):
+        captured["args"] = args
+        captured["kwargs"] = kwargs
+        return _R()
+    monkeypatch.setattr(app_module.subprocess, "run", _run)
+
+    client.post("/api/ping", json={"shorthost": "srv01"})
+    assert isinstance(captured["args"], list)
+    assert captured["kwargs"].get("shell", False) is False
+    assert "10.0.0.5" in captured["args"]
+
+
+def test_index_contains_ping_ui(client):
+    body = client.get("/").data.decode("utf-8")
+    assert "pingHost" in body
