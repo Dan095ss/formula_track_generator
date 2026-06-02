@@ -594,7 +594,10 @@ _HTML = """<!DOCTYPE html>
                              text-transform: uppercase; display: block; margin-bottom: 4px; }
   .diff-summary { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
   .diff-card { flex: 1; min-width: 120px; background: #fff; border-radius: 10px;
-               padding: 14px 16px; box-shadow: 0 1px 4px rgba(0,0,0,.08); text-align: center; }
+               padding: 14px 16px; box-shadow: 0 1px 4px rgba(0,0,0,.08); text-align: center;
+               cursor: pointer; border: 2px solid transparent; transition: border-color .15s, transform .1s; }
+  .diff-card:hover { transform: translateY(-1px); }
+  .diff-card.active { border-color: #0f3460; }
   .diff-card .num { font-size: 28px; font-weight: 700; }
   .diff-card .lbl { font-size: 11px; color: #6b7280; text-transform: uppercase; margin-top: 4px; }
   .diff-card.worse .num { color: #dc2626; } .diff-card.better .num { color: #16a34a; }
@@ -752,10 +755,10 @@ _HTML = """<!DOCTYPE html>
       <button class="action-btn" onclick="runCompare()">\u0421\u0440\u0430\u0432\u043d\u0438\u0442\u044c</button>
     </div>
     <div id="diff-summary" class="diff-summary" style="display:none">
-      <div class="diff-card worse"><div class="num" id="diff-worse">0</div><div class="lbl">\u0423\u0445\u0443\u0434\u0448\u0438\u043b\u0438\u0441\u044c</div></div>
-      <div class="diff-card better"><div class="num" id="diff-better">0</div><div class="lbl">\u0423\u043b\u0443\u0447\u0448\u0438\u043b\u0438\u0441\u044c</div></div>
-      <div class="diff-card newc"><div class="num" id="diff-new">0</div><div class="lbl">\u041d\u043e\u0432\u044b\u0435</div></div>
-      <div class="diff-card remc"><div class="num" id="diff-removed">0</div><div class="lbl">\u0423\u0434\u0430\u043b\u0451\u043d\u043d\u044b\u0435</div></div>
+      <div class="diff-card worse" data-diff="worsened" onclick="setDiffFilter(this)"><div class="num" id="diff-worse">0</div><div class="lbl">\u0423\u0445\u0443\u0434\u0448\u0438\u043b\u0438\u0441\u044c</div></div>
+      <div class="diff-card better" data-diff="improved" onclick="setDiffFilter(this)"><div class="num" id="diff-better">0</div><div class="lbl">\u0423\u043b\u0443\u0447\u0448\u0438\u043b\u0438\u0441\u044c</div></div>
+      <div class="diff-card newc" data-diff="new" onclick="setDiffFilter(this)"><div class="num" id="diff-new">0</div><div class="lbl">\u041d\u043e\u0432\u044b\u0435</div></div>
+      <div class="diff-card remc" data-diff="removed" onclick="setDiffFilter(this)"><div class="num" id="diff-removed">0</div><div class="lbl">\u0423\u0434\u0430\u043b\u0451\u043d\u043d\u044b\u0435</div></div>
     </div>
     <div id="diff-filter-row" style="display:none;margin-bottom:12px">
       <div class="filterbar" style="padding:10px 16px">
