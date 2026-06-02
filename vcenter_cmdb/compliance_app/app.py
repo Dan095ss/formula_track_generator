@@ -33,6 +33,16 @@ from cmdb_os_compliance import (
 
 log = logging.getLogger(__name__)
 
+
+class _MuteScanStatusLog(logging.Filter):
+    """Drop werkzeug access-log lines for the high-frequency status poll."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        return "/api/scan/status" not in record.getMessage()
+
+
+logging.getLogger("werkzeug").addFilter(_MuteScanStatusLog())
+
 app = Flask(__name__)
 
 # ── In-memory data store ─────────────────────────────────────
@@ -1046,9 +1056,16 @@ async function startScan(){
   try{await fetch('/api/scan/start',{method:'POST'});}catch(e){}
   pollScanStatus();
 }
+const POLL_ACTIVE=1000, POLL_IDLE=8000;
+let _pollTimer=null;
+function scheduleNextPoll(running){
+  clearTimeout(_pollTimer);
+  _pollTimer=setTimeout(pollScanStatus, running?POLL_ACTIVE:POLL_IDLE);
+}
 async function pollScanStatus(){
   let s;
-  try{s=await(await fetch('/api/scan/status')).json();}catch(e){return;}
+  try{s=await(await fetch('/api/scan/status')).json();}catch(e){scheduleNextPoll(false);return;}
+  scheduleNextPoll(s.running);
   if(_lastDataVersion===null)_lastDataVersion=s.data_version;
   const banner=document.getElementById('scan-banner');
   const btn=document.getElementById('scan-btn');
@@ -1076,7 +1093,6 @@ async function pollScanStatus(){
     }
   }
 }
-setInterval(pollScanStatus,1000);
 pollScanStatus();
 fetchStats();fetchDivisions();fetchResourceStatuses();fetchData();
 </script>

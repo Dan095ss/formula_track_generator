@@ -430,6 +430,21 @@ def test_scan_status_route(client, reset_scan_state):
     assert "running" in data and "percent" in data and "data_version" in data
 
 
+def test_mute_scan_status_log_filter():
+    import logging
+    f = app_module._MuteScanStatusLog()
+    def rec(msg):
+        return logging.LogRecord("werkzeug", logging.INFO, "", 0, msg, (), None)
+    assert f.filter(rec('"GET /api/scan/status HTTP/1.1" 200 -')) is False
+    assert f.filter(rec('"GET /api/data HTTP/1.1" 200 -')) is True
+
+
+def test_index_uses_adaptive_polling(client):
+    body = client.get("/").data.decode("utf-8")
+    assert "scheduleNextPoll" in body
+    assert "setInterval(pollScanStatus" not in body
+
+
 def test_index_contains_scan_ui(client):
     r = client.get("/")
     body = r.data.decode("utf-8")
