@@ -228,6 +228,8 @@ def _filter_rows(args: dict) -> list[ReportRow]:
         rows = [r for r in rows if r.family == family]
     if division := args.get("division"):
         rows = [r for r in rows if r.division == division]
+    if resource_status := args.get("resource_status"):
+        rows = [r for r in rows if r.resource_status == resource_status]
     if q := args.get("q", "").lower():
         rows = [r for r in rows
                 if q in (r.shorthost + r.os_name + r.owner + r.division + r.reason).lower()]
@@ -252,6 +254,7 @@ def _row_to_dict(r: ReportRow) -> dict:
         "family":    r.family,
         "status":    r.status.value,
         "reason":    r.reason,
+        "resource_status": r.resource_status,
     }
 
 
@@ -359,6 +362,12 @@ def api_divisions():
     return jsonify({"divisions": _divisions})
 
 
+@app.route("/api/resource_statuses")
+def api_resource_statuses():
+    vals = sorted({r.resource_status for r in _rows if r.resource_status})
+    return jsonify({"resource_statuses": vals})
+
+
 @app.route("/api/data")
 def api_data():
     args  = request.args
@@ -385,10 +394,10 @@ def api_export():
     buf   = io.StringIO()
     w     = csv.writer(buf)
     w.writerow(["shorthost", "os_name", "owner", "division",
-                "ke_type", "family", "status", "reason"])
+                "ke_type", "family", "resource_status", "status", "reason"])
     for r in rows:
         w.writerow([r.shorthost, r.os_name, r.owner, r.division,
-                    r.ke_type, r.family, r.status.value, r.reason])
+                    r.ke_type, r.family, r.resource_status, r.status.value, r.reason])
     return Response(
         "﻿" + buf.getvalue(),
         mimetype="text/csv; charset=utf-8",
@@ -573,6 +582,13 @@ _HTML = """<!DOCTYPE html>
                border-radius:4px; transition:width .4s ease; }
   .scan-retry { padding:4px 10px; font-size:12px; border:1px solid #dc2626;
                 border-radius:6px; background:#fff; color:#dc2626; cursor:pointer; }
+  .rbadge { display:inline-block; padding:2px 8px; border-radius:10px; font-size:11px; font-weight:600;
+            white-space:nowrap; }
+  .rbadge.active  { background:#dcfce7; color:#166534; }
+  .rbadge.retired { background:#fee2e2; color:#991b1b; }
+  .rbadge.reserve { background:#fef9c3; color:#854d0e; }
+  .rbadge.other   { background:#e0e7ff; color:#3730a3; }
+  .rbadge.none    { background:#f3f4f6; color:#9ca3af; }
 </style>
 </head>
 <body>
@@ -629,6 +645,8 @@ _HTML = """<!DOCTYPE html>
       <div class="filter-row">
         <span class="filter-label">\u0414\u0438\u0432\u0438\u0437\u0438\u043e\u043d</span>
         <select class="sel" id="div-sel" onchange="setDivision(this.value)"><option value="">\u0412\u0441\u0435 \u0434\u0438\u0432\u0438\u0437\u0438\u043e\u043d\u044b</option></select>
+        <span class="filter-label">\u0421\u0442\u0430\u0442\u0443\u0441 \u0440\u0435\u0441\u0443\u0440\u0441\u0430</span>
+        <select class="sel" id="rstatus-sel" onchange="setResourceStatus(this.value)"><option value="">\u041b\u044e\u0431\u043e\u0439 \u0441\u0442\u0430\u0442\u0443\u0441</option></select>
         <select class="sel" onchange="changeSize(this.value)" style="margin-left:auto">
           <option value="50">50 / \u0441\u0442\u0440.</option><option value="100" selected>100 / \u0441\u0442\u0440.</option>
           <option value="200">200 / \u0441\u0442\u0440.</option><option value="500">500 / \u0441\u0442\u0440.</option>
@@ -642,7 +660,7 @@ _HTML = """<!DOCTYPE html>
     </div>
     <div class="table-wrap">
       <table><thead id="thead"></thead>
-      <tbody id="tbody"><tr><td class="loading" colspan="8">\u0417\u0430\u0433\u0440\u0443\u0437\u043a\u0430\u2026</td></tr></tbody></table>
+      <tbody id="tbody"><tr><td class="loading" colspan="9">\u0417\u0430\u0433\u0440\u0443\u0437\u043a\u0430\u2026</td></tr></tbody></table>
       <div class="pagination">
         <div class="pag-info" id="pag-info"></div>
         <div class="pag-controls" id="pag-controls"></div>
@@ -739,15 +757,25 @@ const COLS=[
   {f:'shorthost',label:'\u0425\u043e\u0441\u0442',cls:'host'},{f:'os_name',label:'\u041e\u0421',cls:'os'},
   {f:'owner',label:'\u0412\u043b\u0430\u0434\u0435\u043b\u0435\u0446',cls:'own'},{f:'division',label:'\u0414\u0438\u0432\u0438\u0437\u0438\u043e\u043d',cls:'div'},
   {f:'ke_type',label:'\u0422\u0438\u043f \u041a\u0415',cls:'ke'},{f:'family',label:'\u0421\u0435\u043c\u0435\u0439\u0441\u0442\u0432\u043e',cls:'fam'},
-  {f:'status',label:'\u0421\u0442\u0430\u0442\u0443\u0441',cls:''},{f:'reason',label:'\u041f\u0440\u0438\u0447\u0438\u043d\u0430',cls:'reason'},
+  {f:'resource_status',label:'\u0421\u0442\u0430\u0442\u0443\u0441 \u0440\u0435\u0441\u0443\u0440\u0441\u0430',cls:'rstatus'},
+  {f:'status',label:'\u0421\u043e\u043e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0438\u0435',cls:''},{f:'reason',label:'\u041f\u0440\u0438\u0447\u0438\u043d\u0430',cls:'reason'},
 ];
 const ROW_CLASS={OK:'row-ok',WARNING:'row-warning',NON_COMPLIANT:'row-fail',UNKNOWN:'row-unknown'};
+function resBadge(v){
+  if(!v)return '<span class="rbadge none">\u2014</span>';
+  const s=v.toLowerCase();
+  let cls='other';
+  if(/(\u044d\u043a\u0441\u043f\u043b\u0443\u0430\u0442|\u0430\u043a\u0442\u0438\u0432|\u0440\u0430\u0431\u043e\u0442|active|in use|production|prod)/.test(s))cls='active';
+  else if(/(\u0432\u044b\u0432\u0435\u0434|\u0441\u043f\u0438\u0441\u0430\u043d|\u0434\u0435\u043a\u043e\u043c|\u0443\u0442\u0438\u043b\u0438\u0437|\u0430\u0440\u0445\u0438\u0432|decom|retired|disposed|inactive)/.test(s))cls='retired';
+  else if(/(\u0440\u0435\u0437\u0435\u0440\u0432|\u0445\u0440\u0430\u043d|\u0441\u043a\u043b\u0430\u0434|storage|reserve|spare|stock)/.test(s))cls='reserve';
+  return '<span class="rbadge '+cls+'">'+esc(v)+'</span>';
+}
 const BADGE={
   OK:'<span class="badge ok">OK</span>',WARNING:'<span class="badge warning">WARNING</span>',
   NON_COMPLIANT:'<span class="badge fail">NON_COMPLIANT</span>',UNKNOWN:'<span class="badge unknown">UNKNOWN</span>',
 };
 const FAM={windows_server:'Win Server',windows_client:'Win Client',linux:'Linux',unknown:'\u2014'};
-let state={page:1,size:100,status:'',family:'',division:'',q:'',sort:'',dir:'asc'};
+let state={page:1,size:100,status:'',family:'',division:'',resource_status:'',q:'',sort:'',dir:'asc'};
 let _searchTimer=null;
 async function fetchStats(){
   const d=await(await fetch('/api/stats')).json();
@@ -766,12 +794,21 @@ async function fetchDivisions(){
   d.divisions.forEach(v=>{const o=document.createElement('option');o.value=v;o.textContent=v;sel.appendChild(o);});
   if(cur)sel.value=cur;
 }
+async function fetchResourceStatuses(){
+  const d=await(await fetch('/api/resource_statuses')).json();
+  const sel=document.getElementById('rstatus-sel');
+  const cur=sel.value;
+  sel.innerHTML='<option value="">\u041b\u044e\u0431\u043e\u0439 \u0441\u0442\u0430\u0442\u0443\u0441</option>';
+  d.resource_statuses.forEach(v=>{const o=document.createElement('option');o.value=v;o.textContent=v;sel.appendChild(o);});
+  if(cur)sel.value=cur;
+}
 async function fetchData(){
   const p=new URLSearchParams({page:state.page,size:state.size});
   if(state.status)p.set('status',state.status);if(state.family)p.set('family',state.family);
   if(state.division)p.set('division',state.division);if(state.q)p.set('q',state.q);
+  if(state.resource_status)p.set('resource_status',state.resource_status);
   if(state.sort){p.set('sort',state.sort);p.set('dir',state.dir);}
-  document.getElementById('tbody').innerHTML='<tr><td class="loading" colspan="8">\u0417\u0430\u0433\u0440\u0443\u0437\u043a\u0430\u2026</td></tr>';
+  document.getElementById('tbody').innerHTML='<tr><td class="loading" colspan="9">\u0417\u0430\u0433\u0440\u0443\u0437\u043a\u0430\u2026</td></tr>';
   const d=await(await fetch('/api/data?'+p)).json();
   renderHeaders();renderRows(d.data);renderPagination(d.total,d.page,d.pages);
 }
@@ -783,12 +820,13 @@ function renderHeaders(){
 }
 function renderRows(rows){
   const tbody=document.getElementById('tbody');
-  if(!rows.length){tbody.innerHTML='<tr><td class="empty" colspan="8">\u041d\u0438\u0447\u0435\u0433\u043e \u043d\u0435 \u043d\u0430\u0439\u0434\u0435\u043d\u043e</td></tr>';return;}
+  if(!rows.length){tbody.innerHTML='<tr><td class="empty" colspan="9">\u041d\u0438\u0447\u0435\u0433\u043e \u043d\u0435 \u043d\u0430\u0439\u0434\u0435\u043d\u043e</td></tr>';return;}
   tbody.innerHTML=rows.map(r=>
     '<tr class="'+(ROW_CLASS[r.status]||'')+'">' +
     '<td class="host">'+esc(r.shorthost)+'</td><td class="os">'+esc(r.os_name)+'</td>' +
     '<td class="own">'+esc(r.owner)+'</td><td class="div">'+esc(r.division||'\u2014')+'</td>' +
     '<td class="ke">'+esc(r.ke_type)+'</td><td class="fam">'+esc(FAM[r.family]||r.family)+'</td>' +
+    '<td class="rstatus">'+resBadge(r.resource_status)+'</td>' +
     '<td>'+(BADGE[r.status]||esc(r.status))+'</td><td class="reason">'+esc(r.reason)+'</td></tr>'
   ).join('');
 }
@@ -811,9 +849,10 @@ function changeSize(v){state.size=+v;state.page=1;fetchData();}
 function setStatus(v){state.status=v;state.page=1;document.querySelectorAll('[data-status]').forEach(b=>b.classList.toggle('active',b.dataset.status===v));fetchData();}
 function setFamily(v){state.family=v;state.page=1;document.querySelectorAll('[data-fam]').forEach(b=>b.classList.toggle('active',b.dataset.fam===v));fetchData();}
 function setDivision(v){state.division=v;state.page=1;fetchData();}
+function setResourceStatus(v){state.resource_status=v;state.page=1;fetchData();}
 function debounceSearch(v){clearTimeout(_searchTimer);_searchTimer=setTimeout(()=>{state.q=v;state.page=1;fetchData();},300);}
 function toggleSort(field){if(state.sort===field){if(state.dir==='asc')state.dir='desc';else{state.sort='';state.dir='asc';}}else{state.sort=field;state.dir='asc';}state.page=1;fetchData();}
-function exportCSV(){const p=new URLSearchParams();if(state.status)p.set('status',state.status);if(state.family)p.set('family',state.family);if(state.division)p.set('division',state.division);if(state.q)p.set('q',state.q);if(state.sort){p.set('sort',state.sort);p.set('dir',state.dir);}window.location='/api/export?'+p;}
+function exportCSV(){const p=new URLSearchParams();if(state.status)p.set('status',state.status);if(state.family)p.set('family',state.family);if(state.division)p.set('division',state.division);if(state.resource_status)p.set('resource_status',state.resource_status);if(state.q)p.set('q',state.q);if(state.sort){p.set('sort',state.sort);p.set('dir',state.dir);}window.location='/api/export?'+p;}
 async function loadHistory(){
   const snaps=await(await fetch('/api/snapshots')).json();
   const tbody=document.getElementById('history-tbody');
@@ -967,7 +1006,7 @@ async function pollScanStatus(){
 }
 setInterval(pollScanStatus,1000);
 pollScanStatus();
-fetchStats();fetchDivisions();fetchData();
+fetchStats();fetchDivisions();fetchResourceStatuses();fetchData();
 </script>
 </body>
 </html>"""

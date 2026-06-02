@@ -9,19 +9,20 @@ from cmdb_os_compliance import ReportRow, Status
 
 def _row(shorthost="srv01", os_name="ubuntu 22.04", owner="IT / Ivanov.AA",
          ke_type="HOST", status=Status.OK, reason="OK", division="04. дів. Урал",
-         family="linux") -> ReportRow:
+         family="linux", resource_status="в эксплуатации") -> ReportRow:
     return ReportRow(shorthost=shorthost, os_name=os_name, owner=owner,
                      ke_type=ke_type, status=status, reason=reason,
-                     division=division, family=family)
+                     division=division, family=family,
+                     resource_status=resource_status)
 
 
 @pytest.fixture(autouse=True)
 def mock_rows(monkeypatch):
     rows = [
-        _row("srv01", status=Status.OK,            family="linux",          division="04. дів. Урал"),
-        _row("vm01",  status=Status.NON_COMPLIANT, family="windows_client", division="05. дів. Юг"),
-        _row("db01",  status=Status.WARNING,       family="windows_server", division="04. дів. Урал"),
-        _row("pc01",  status=Status.NON_COMPLIANT, family="windows_client", division=""),
+        _row("srv01", status=Status.OK,            family="linux",          division="04. дів. Урал", resource_status="в эксплуатации"),
+        _row("vm01",  status=Status.NON_COMPLIANT, family="windows_client", division="05. дів. Юг",   resource_status="выведен"),
+        _row("db01",  status=Status.WARNING,       family="windows_server", division="04. дів. Урал", resource_status="в эксплуатации"),
+        _row("pc01",  status=Status.NON_COMPLIANT, family="windows_client", division="",              resource_status=""),
     ]
     monkeypatch.setattr(app_module, "_rows", rows)
     monkeypatch.setattr(app_module, "_summary", {"total": 4, "OK": 1, "WARNING": 1, "NON_COMPLIANT": 2, "UNKNOWN": 0})
@@ -435,3 +436,45 @@ def test_index_contains_scan_ui(client):
     assert "scan-btn" in body
     assert "startScan" in body
     assert "pollScanStatus" in body
+
+
+# ============================================================
+# Feature 2: resource status
+# ============================================================
+from cmdb_os_compliance import resource_status_of
+
+
+def test_resource_status_of_reads_status_attr():
+    ci = {"attrs": [{"type": {"name": "status"}, "bvalue": "в эксплуатации"}]}
+    assert resource_status_of(ci) == "в эксплуатации"
+
+
+def test_resource_status_of_missing_returns_empty():
+    assert resource_status_of({"attrs": []}) == ""
+
+
+def test_filter_by_resource_status():
+    result = app_module._filter_rows({"resource_status": "выведен"})
+    assert len(result) == 1
+    assert result[0].shorthost == "vm01"
+
+
+def test_row_to_dict_has_resource_status():
+    d = app_module._row_to_dict(app_module._rows[0])
+    assert "resource_status" in d
+
+
+def test_resource_statuses_route(client):
+    r = client.get("/api/resource_statuses")
+    assert r.status_code == 200
+    data = r.get_json()["resource_statuses"]
+    assert "в эксплуатации" in data
+    assert "выведен" in data
+    assert "" not in data  # empty values excluded
+
+
+def test_index_contains_resource_status_ui(client):
+    body = client.get("/").data.decode("utf-8")
+    assert "rstatus-sel" in body
+    assert "fetchResourceStatuses" in body
+    assert "resource_status" in body
