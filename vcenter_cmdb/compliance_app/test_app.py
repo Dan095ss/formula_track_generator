@@ -378,3 +378,52 @@ def test_scan_progress_tick_advances_within_phase(reset_scan_state):
     p.tick(1, 2)          # halfway: 10 + 35*0.5 = 27.5 -> 27
     assert app_module._scan_state["percent"] == 27
     assert "1/2" in app_module._scan_state["detail"]
+
+
+# ============================================================
+# Scan runner + endpoints
+# ============================================================
+
+def test_run_scan_success_increments_version(reset_scan_state, monkeypatch):
+    monkeypatch.setattr(app_module, "load_data", lambda progress=None: None)
+    app_module._scan_state["data_version"] = 5
+    app_module._scan_state["running"] = True
+    app_module._run_scan()
+    assert app_module._scan_state["running"] is False
+    assert app_module._scan_state["data_version"] == 6
+    assert app_module._scan_state["error"] is None
+
+
+def test_run_scan_failure_sets_error(reset_scan_state, monkeypatch):
+    def boom(progress=None):
+        raise RuntimeError("CMDB down")
+    monkeypatch.setattr(app_module, "load_data", boom)
+    app_module._scan_state["data_version"] = 5
+    app_module._scan_state["running"] = True
+    app_module._run_scan()
+    assert app_module._scan_state["running"] is False
+    assert app_module._scan_state["error"] == "CMDB down"
+    assert app_module._scan_state["data_version"] == 5
+
+
+def test_scan_start_returns_202(client, reset_scan_state, monkeypatch):
+    monkeypatch.setattr(app_module, "_run_scan", lambda: None)
+    app_module._scan_state["running"] = False
+    r = client.post("/api/scan/start")
+    assert r.status_code == 202
+    assert r.get_json()["started"] is True
+    assert app_module._scan_state["running"] is True
+
+
+def test_scan_start_conflict_returns_409(client, reset_scan_state):
+    app_module._scan_state["running"] = True
+    r = client.post("/api/scan/start")
+    assert r.status_code == 409
+    assert "error" in r.get_json()
+
+
+def test_scan_status_route(client, reset_scan_state):
+    r = client.get("/api/scan/status")
+    assert r.status_code == 200
+    data = r.get_json()
+    assert "running" in data and "percent" in data and "data_version" in data

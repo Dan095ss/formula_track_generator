@@ -305,11 +305,48 @@ def load_data(progress: "ScanProgress | None" = None) -> None:
     save_snapshot(_rows, source="cmdb")
 
 
+def _run_scan() -> None:
+    progress = ScanProgress()
+    try:
+        load_data(progress)
+        with _scan_lock:
+            _scan_state["data_version"] += 1
+            _scan_state["error"] = None
+    except Exception as e:
+        with _scan_lock:
+            _scan_state["error"] = str(e)
+        log.exception("Scan failed")
+    finally:
+        with _scan_lock:
+            _scan_state["running"] = False
+            _scan_state["finished_at"] = datetime.now().isoformat(timespec="seconds")
+
+
 # ── Routes ───────────────────────────────────────────────────
 
 @app.route("/")
 def index() -> str:
     return _HTML
+
+
+@app.route("/api/scan/start", methods=["POST"])
+def api_scan_start():
+    with _scan_lock:
+        if _scan_state["running"]:
+            return jsonify({"error": "Сканирование уже выполняется"}), 409
+        _scan_state.update(
+            running=True, phase="", phase_index=0, percent=0, detail="",
+            error=None, finished_at=None,
+            started_at=datetime.now().isoformat(timespec="seconds"),
+        )
+    threading.Thread(target=_run_scan, daemon=True).start()
+    return jsonify({"started": True}), 202
+
+
+@app.route("/api/scan/status")
+def api_scan_status():
+    with _scan_lock:
+        return jsonify(dict(_scan_state))
 
 
 @app.route("/api/stats")
