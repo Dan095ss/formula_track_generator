@@ -271,17 +271,25 @@ def os_name_of(ci: dict) -> str | None:
     return extract_attrs(ci).get("os_name") or None
 
 
-_RESOURCE_STATUS_KEYS = ("status", "state", "статус", "ci_status", "lifecycle")
+def build_ip_map(ip_cis: Iterable[dict]) -> dict[str, dict[str, str]]:
+    """Build {shorthost: {"state": ..., "address": ...}} from 'IP' CI type.
 
-
-def resource_status_of(ci: dict) -> str:
-    """Resource lifecycle status from CMDB ('status' attr, with aliases)."""
-    attrs = extract_attrs(ci)
-    for key in _RESOURCE_STATUS_KEYS:
-        val = (attrs.get(key) or "").strip()
-        if val:
-            return val
-    return ""
+    Resource lifecycle status (``state``) and IP address (``address``) live on
+    the 'IP' CI, linked to HOST/VM by the ``shorthost`` attribute. First CI per
+    shorthost wins.
+    """
+    result: dict[str, dict[str, str]] = {}
+    for ci in ip_cis:
+        attrs = extract_attrs(ci)
+        sh = (attrs.get("shorthost") or "").strip().lower()
+        if not sh or sh in result:
+            continue
+        result[sh] = {
+            "state":   (attrs.get("state") or "").strip(),
+            "address": (attrs.get("address") or "").strip(),
+        }
+    log.info("build_ip_map: %d IP records indexed by shorthost", len(result))
+    return result
 
 
 def owner_of(ci: dict) -> str | None:
@@ -424,6 +432,7 @@ class HostRecord:
     sources: set[str]
     division: str | None = None
     resource_status: str | None = None
+    ip_address: str | None = None
 
     @property
     def ke_type(self) -> str:
@@ -487,13 +496,19 @@ def build_inventory(
     branches_by_name: dict[str, str] | None = None,
     host_branch_map: dict[str, str] | None = None,
     account_division_map: dict[str, str] | None = None,
+    ip_map: dict[str, dict[str, str]] | None = None,
 ) -> dict[str, HostRecord]:
-    """Build {shorthost: HostRecord}. HOST os_name and owner take priority over VM."""
+    """Build {shorthost: HostRecord}. HOST os_name and owner take priority over VM.
+
+    ``ip_map`` (from :func:`build_ip_map`) supplies resource_status and
+    ip_address, keyed by shorthost.
+    """
     bu    = branches_by_uuid     or {}
     bn    = branches_by_number   or {}
     bname = branches_by_name     or {}
     hbm   = host_branch_map      or {}
     adm   = account_division_map or {}
+    ipm   = ip_map               or {}
     inv: dict[str, HostRecord] = {}
 
     skip_host = 0
@@ -505,7 +520,6 @@ def build_inventory(
         osn = os_name_of(ci)
         own = owner_of(ci)
         div = resolve_division(ci, bu, bn, bname, hbm, adm)
-        rst = resource_status_of(ci)
         if sh in inv:
             log.warning("Duplicate HOST shorthost %r — keeping first values", sh)
             inv[sh].sources.add("HOST")
@@ -515,12 +529,9 @@ def build_inventory(
                 inv[sh].owner = own
             if inv[sh].division is None and div:
                 inv[sh].division = div
-            if not inv[sh].resource_status and rst:
-                inv[sh].resource_status = rst
         else:
             inv[sh] = HostRecord(shorthost=sh, os_name=osn, owner=own,
-                                  sources={"HOST"}, division=div,
-                                  resource_status=rst)
+                                  sources={"HOST"}, division=div)
 
     if skip_host:
         log.debug("Skipped %d HOST CIs without shorthost", skip_host)
@@ -534,19 +545,21 @@ def build_inventory(
         osn = os_name_of(ci)
         own = owner_of(ci)
         div = resolve_division(ci, bu, bn, bname, hbm, adm)
-        rst = resource_status_of(ci)
         if sh in inv:
             inv[sh].sources.add("VM")
             # HOST values win — do NOT overwrite
-            if not inv[sh].resource_status and rst:
-                inv[sh].resource_status = rst
         else:
             inv[sh] = HostRecord(shorthost=sh, os_name=osn, owner=own,
-                                  sources={"VM"}, division=div,
-                                  resource_status=rst)
+                                  sources={"VM"}, division=div)
 
     if skip_vm:
         log.debug("Skipped %d VM CIs without shorthost", skip_vm)
+
+    for sh, rec in inv.items():
+        ip = ipm.get(sh)
+        if ip:
+            rec.resource_status = ip.get("state") or None
+            rec.ip_address      = ip.get("address") or None
 
     return inv
 
@@ -566,6 +579,7 @@ class ReportRow:
     division: str = ""
     family: str = ""
     resource_status: str = ""
+    ip_address: str = ""
 
 
 def build_report(inventory: dict[str, HostRecord]) -> list[ReportRow]:
@@ -582,6 +596,7 @@ def build_report(inventory: dict[str, HostRecord]) -> list[ReportRow]:
             division=rec.division or "",
             family=result.family,
             resource_status=rec.resource_status or "",
+            ip_address=rec.ip_address or "",
         ))
     rows.sort(key=lambda r: (_STATUS_PRIORITY[r.status], r.shorthost))
     return rows

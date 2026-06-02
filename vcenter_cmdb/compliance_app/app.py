@@ -25,6 +25,7 @@ from cmdb_os_compliance import (
     build_account_division_map,
     build_branch_maps,
     build_inventory,
+    build_ip_map,
     build_report,
     load_config,
     summarize,
@@ -60,8 +61,9 @@ _SCAN_PHASES = [
     ("Загрузка филиалов", 8),
     ("Карта host→branch (ref-скан)", 35),
     ("Загрузка ACCOUNT", 10),
-    ("Загрузка HOST", 20),
-    ("Загрузка VM", 20),
+    ("Загрузка HOST", 15),
+    ("Загрузка VM", 15),
+    ("Загрузка IP", 10),
     ("Сборка отчёта", 5),
 ]
 
@@ -258,6 +260,7 @@ def _row_to_dict(r: ReportRow) -> dict:
         "status":    r.status.value,
         "reason":    r.reason,
         "resource_status": r.resource_status,
+        "ip_address": r.ip_address,
     }
 
 
@@ -299,10 +302,19 @@ def load_data(progress: "ScanProgress | None" = None) -> None:
     progress.phase(6)                       # Загрузка VM
     vm_cis = list(client.iter_cis(vm_uuid, on_page=progress.tick))
 
-    inventory = build_inventory(host_cis, vm_cis, bu, bn, bname, hbm, adm)
+    progress.phase(7)                       # Загрузка IP
+    try:
+        ip_uuid = client.get_ci_type_uuid("IP")
+        ip_map = build_ip_map(client.iter_cis(ip_uuid, on_page=progress.tick))
+        log.info("ip_map: %d entries", len(ip_map))
+    except Exception as e:
+        log.warning("Could not load IP CIs: %s", e)
+        ip_map = {}
+
+    inventory = build_inventory(host_cis, vm_cis, bu, bn, bname, hbm, adm, ip_map)
     log.info("%d unique KEs", len(inventory))
 
-    progress.phase(7)                       # Сборка отчёта
+    progress.phase(8)                       # Сборка отчёта
     _rows      = build_report(inventory)
     _summary   = summarize(_rows)
     _divisions = sorted({r.division for r in _rows if r.division})
@@ -883,7 +895,7 @@ function renderRows(rows){
   if(!rows.length){tbody.innerHTML='<tr><td class="empty" colspan="9">\u041d\u0438\u0447\u0435\u0433\u043e \u043d\u0435 \u043d\u0430\u0439\u0434\u0435\u043d\u043e</td></tr>';return;}
   tbody.innerHTML=rows.map(r=>
     '<tr class="'+(ROW_CLASS[r.status]||'')+'">' +
-    '<td class="host"><span class="host-link" title="\u041f\u0438\u043d\u0433" onclick="pingHost(this)">'+esc(r.shorthost)+'</span><span class="ping-res"></span></td><td class="os">'+esc(r.os_name)+'</td>' +
+    '<td class="host"><span class="host-link" title="IP: '+esc(r.ip_address||'-')+'" onclick="pingHost(this)">'+esc(r.shorthost)+'</span><span class="ping-res"></span></td><td class="os">'+esc(r.os_name)+'</td>' +
     '<td class="own">'+esc(r.owner)+'</td><td class="div">'+esc(r.division||'\u2014')+'</td>' +
     '<td class="ke">'+esc(r.ke_type)+'</td><td class="fam">'+esc(FAM[r.family]||r.family)+'</td>' +
     '<td class="rstatus">'+resBadge(r.resource_status)+'</td>' +

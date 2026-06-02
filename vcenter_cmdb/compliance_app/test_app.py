@@ -9,11 +9,11 @@ from cmdb_os_compliance import ReportRow, Status
 
 def _row(shorthost="srv01", os_name="ubuntu 22.04", owner="IT / Ivanov.AA",
          ke_type="HOST", status=Status.OK, reason="OK", division="04. дів. Урал",
-         family="linux", resource_status="в эксплуатации") -> ReportRow:
+         family="linux", resource_status="в эксплуатации", ip_address="10.0.0.1") -> ReportRow:
     return ReportRow(shorthost=shorthost, os_name=os_name, owner=owner,
                      ke_type=ke_type, status=status, reason=reason,
                      division=division, family=family,
-                     resource_status=resource_status)
+                     resource_status=resource_status, ip_address=ip_address)
 
 
 @pytest.fixture(autouse=True)
@@ -369,7 +369,7 @@ def test_scan_progress_phase_sets_base_percent(reset_scan_state):
     p.phase(3)  # weights 1-2 are 2 + 8 = 10
     assert app_module._scan_state["percent"] == 10
     assert app_module._scan_state["phase_index"] == 3
-    assert app_module._scan_state["phase_total"] == 7
+    assert app_module._scan_state["phase_total"] == 8
     assert app_module._scan_state["phase"]  # non-empty label
 
 
@@ -439,18 +439,45 @@ def test_index_contains_scan_ui(client):
 
 
 # ============================================================
-# Feature 2: resource status
+# Feature 2: resource status + IP (from CMDB 'IP' CI type)
 # ============================================================
-from cmdb_os_compliance import resource_status_of
+from cmdb_os_compliance import build_ip_map, build_inventory
 
 
-def test_resource_status_of_reads_status_attr():
-    ci = {"attrs": [{"type": {"name": "status"}, "bvalue": "в эксплуатации"}]}
-    assert resource_status_of(ci) == "в эксплуатации"
+def _ip_ci(shorthost, state="", address=""):
+    attrs = [{"type": {"name": "shorthost"}, "bvalue": shorthost}]
+    if state:
+        attrs.append({"type": {"name": "state"}, "bvalue": state})
+    if address:
+        attrs.append({"type": {"name": "address"}, "bvalue": address})
+    return {"uuid": "ip-" + shorthost, "attrs": attrs}
 
 
-def test_resource_status_of_missing_returns_empty():
-    assert resource_status_of({"attrs": []}) == ""
+def test_build_ip_map_reads_state_and_address():
+    m = build_ip_map([_ip_ci("srv01", state="в эксплуатации", address="10.0.0.5")])
+    assert m["srv01"]["state"] == "в эксплуатации"
+    assert m["srv01"]["address"] == "10.0.0.5"
+
+
+def test_build_ip_map_skips_without_shorthost():
+    m = build_ip_map([{"uuid": "x", "attrs": [{"type": {"name": "state"}, "bvalue": "x"}]}])
+    assert m == {}
+
+
+def test_build_inventory_applies_ip_map():
+    host = {"attrs": [{"type": {"name": "shorthost"}, "bvalue": "srv01"}]}
+    ip_map = {"srv01": {"state": "выведен", "address": "10.1.2.3"}}
+    inv = build_inventory([host], [], ip_map=ip_map)
+    assert inv["srv01"].resource_status == "выведен"
+    assert inv["srv01"].ip_address == "10.1.2.3"
+
+
+def test_build_inventory_no_ip_map_leaves_status_empty():
+    host = {"attrs": [{"type": {"name": "shorthost"}, "bvalue": "srv01"},
+                      {"type": {"name": "status"}, "bvalue": "ignored"}]}
+    inv = build_inventory([host], [])
+    assert inv["srv01"].resource_status in (None, "")
+    assert inv["srv01"].ip_address in (None, "")
 
 
 def test_filter_by_resource_status():
@@ -462,6 +489,16 @@ def test_filter_by_resource_status():
 def test_row_to_dict_has_resource_status():
     d = app_module._row_to_dict(app_module._rows[0])
     assert "resource_status" in d
+
+
+def test_row_to_dict_has_ip_address():
+    d = app_module._row_to_dict(app_module._rows[0])
+    assert "ip_address" in d
+
+
+def test_index_contains_ip_tooltip(client):
+    body = client.get("/").data.decode("utf-8")
+    assert "ip_address" in body
 
 
 def test_resource_statuses_route(client):
