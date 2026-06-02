@@ -499,6 +499,7 @@ _HTML = """<!DOCTYPE html>
   .tab-btn { padding: 10px 22px; border: none; border-radius: 8px 8px 0 0; background: #e5e7eb;
              cursor: pointer; font-size: 14px; font-weight: 500; color: #6b7280; transition: all .15s; }
   .tab-btn.active { background: #fff; color: #0f3460; box-shadow: 0 -2px 0 #0f3460 inset; }
+  .tab-ico { width: 15px; height: 15px; vertical-align: -2px; margin-right: 2px; }
   .tab-content { display: none; }
   .tab-content.active { display: block; }
   .cards { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 16px; }
@@ -656,10 +657,10 @@ _HTML = """<!DOCTYPE html>
     <div class="scan-track"><div class="scan-fill" id="scan-fill"></div></div>
   </div>
   <div class="tabs">
-    <button class="tab-btn active" onclick="showTab('table')">📋 \u0422\u0430\u0431\u043b\u0438\u0446\u0430</button>
-    <button class="tab-btn"        onclick="showTab('history')">🕗 \u0418\u0441\u0442\u043e\u0440\u0438\u044f</button>
-    <button class="tab-btn"        onclick="showTab('trend')">📈 \u0422\u0440\u0435\u043d\u0434</button>
-    <button class="tab-btn"        onclick="showTab('compare')">&#9878; \u0421\u0440\u0430\u0432\u043d\u0435\u043d\u0438\u0435</button>
+    <button class="tab-btn active" onclick="showTab('table')"><svg class="tab-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="1"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="14" x2="21" y2="14"/><line x1="9" y1="9" x2="9" y2="20"/></svg>\u0422\u0430\u0431\u043b\u0438\u0446\u0430</button>
+    <button class="tab-btn"        onclick="showTab('history')"><svg class="tab-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 16 14"/></svg>\u0418\u0441\u0442\u043e\u0440\u0438\u044f</button>
+    <button class="tab-btn"        onclick="showTab('trend')"><svg class="tab-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 17 9 11 13 15 21 6"/><polyline points="14 6 21 6 21 13"/></svg>\u0422\u0440\u0435\u043d\u0434</button>
+    <button class="tab-btn"        onclick="showTab('compare')"><svg class="tab-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="3" x2="12" y2="21"/><polyline points="5 7 12 5 19 7"/><path d="M5 7 L2 14 a3 3 0 0 0 6 0 Z"/><path d="M19 7 L16 14 a3 3 0 0 0 6 0 Z"/></svg>\u0421\u0440\u0430\u0432\u043d\u0435\u043d\u0438\u0435</button>
   </div>
 
   <div id="tab-table" class="tab-content active">
