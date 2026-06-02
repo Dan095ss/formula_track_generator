@@ -347,3 +347,34 @@ def test_iter_cis_without_callback_still_works():
     c = _client()
     c._session = _FakeSession([{"total_pages": 1, "total_items": 1, "page_data": [{"a": 1}]}])
     assert list(c.iter_cis("uuid")) == [{"a": 1}]
+
+
+# ============================================================
+# ScanProgress
+# ============================================================
+import copy
+
+
+@pytest.fixture
+def reset_scan_state():
+    saved = copy.deepcopy(app_module._scan_state)
+    yield
+    app_module._scan_state.clear()
+    app_module._scan_state.update(saved)
+
+
+def test_scan_progress_phase_sets_base_percent(reset_scan_state):
+    p = app_module.ScanProgress()
+    p.phase(3)  # weights 1-2 are 2 + 8 = 10
+    assert app_module._scan_state["percent"] == 10
+    assert app_module._scan_state["phase_index"] == 3
+    assert app_module._scan_state["phase_total"] == 7
+    assert app_module._scan_state["phase"]  # non-empty label
+
+
+def test_scan_progress_tick_advances_within_phase(reset_scan_state):
+    p = app_module.ScanProgress()
+    p.phase(3)            # base 10, phase weight 35
+    p.tick(1, 2)          # halfway: 10 + 35*0.5 = 27.5 -> 27
+    assert app_module._scan_state["percent"] == 27
+    assert "1/2" in app_module._scan_state["detail"]

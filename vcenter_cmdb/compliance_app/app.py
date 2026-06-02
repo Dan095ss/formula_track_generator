@@ -37,6 +37,61 @@ _summary: dict[str, int] = {"total": 0, "OK": 0, "WARNING": 0, "NON_COMPLIANT": 
 _divisions: list[str] = []
 
 
+# ── Scan state (global, multi-client) ────────────────────────
+_scan_lock = threading.Lock()
+_scan_state: dict = {
+    "running":      False,
+    "phase":        "",
+    "phase_index":  0,
+    "phase_total":  7,
+    "percent":      0,
+    "detail":       "",
+    "started_at":   None,
+    "finished_at":  None,
+    "error":        None,
+    "data_version": 0,
+}
+
+_SCAN_PHASES = [
+    ("Авторизация", 2),
+    ("Загрузка филиалов", 8),
+    ("Карта host→branch (ref-скан)", 35),
+    ("Загрузка ACCOUNT", 10),
+    ("Загрузка HOST", 20),
+    ("Загрузка VM", 20),
+    ("Сборка отчёта", 5),
+]
+
+
+class ScanProgress:
+    """Writes weighted phase progress into the global _scan_state."""
+
+    def __init__(self, phases=_SCAN_PHASES) -> None:
+        self._phases = phases
+        self._base = 0
+        self._cur_weight = 0
+
+    def phase(self, index: int, label: str | None = None) -> None:
+        self._base = sum(w for _, w in self._phases[: index - 1])
+        self._cur_weight = self._phases[index - 1][1]
+        lbl = label or self._phases[index - 1][0]
+        with _scan_lock:
+            _scan_state["phase"] = lbl
+            _scan_state["phase_index"] = index
+            _scan_state["phase_total"] = len(self._phases)
+            _scan_state["percent"] = int(self._base)
+            _scan_state["detail"] = ""
+
+    def tick(self, current: int, total: int) -> None:
+        frac = (current / total) if total else 0
+        pct = self._base + self._cur_weight * frac
+        with _scan_lock:
+            _scan_state["percent"] = int(min(pct, 100))
+            _scan_state["detail"] = (
+                f"страница {current}/{total}" if total else ""
+            )
+
+
 # ── Snapshot storage ─────────────────────────────────────────
 SNAPSHOTS_DIR = Path(__file__).parent / "snapshots"
 _STATUS_PRIO  = {"NON_COMPLIANT": 0, "WARNING": 1, "UNKNOWN": 2, "OK": 3}
