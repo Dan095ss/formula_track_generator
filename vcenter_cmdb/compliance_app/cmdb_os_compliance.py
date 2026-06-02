@@ -1163,7 +1163,7 @@ class CmdbClient:
             log.warning("Multiple CI types match %r — using first: %s", name, matches[0]["uuid"])
         return matches[0]["uuid"]
 
-    def iter_cis(self, ci_type_uuid: str) -> Iterator[dict]:
+    def iter_cis(self, ci_type_uuid: str, on_page=None) -> Iterator[dict]:
         page = 1
         total_pages = None
         while True:
@@ -1179,12 +1179,14 @@ class CmdbClient:
                 total_pages = body.get("total_pages", 1)
                 log.info("CI type %s: %d items, %d pages", ci_type_uuid, body.get("total_items", "?"), total_pages)
             yield from body.get("page_data", [])
+            if on_page:
+                on_page(page, total_pages)
             log.debug("Fetched page %d/%d", page, total_pages)
             if page >= total_pages:
                 break
             page += 1
 
-    def iter_refs(self, ref_type_uuid: str) -> Iterator[dict]:
+    def iter_refs(self, ref_type_uuid: str, on_page=None) -> Iterator[dict]:
         """Iterate all Ref objects of a given ref_type, paginated."""
         page = 1
         total_pages = None
@@ -1202,12 +1204,14 @@ class CmdbClient:
                 log.info("Ref type %s: %d refs, %d pages",
                          ref_type_uuid, body.get("total_items", "?"), total_pages)
             yield from body.get("page_data", [])
+            if on_page:
+                on_page(page, total_pages)
             if page >= total_pages:
                 break
             page += 1
 
     def build_host_branch_map(
-        self, branches_by_uuid: dict[str, str]
+        self, branches_by_uuid: dict[str, str], on_progress=None
     ) -> dict[str, str]:
         """Build {host_ci_uuid → division} by scanning all ref types in CMDB.
 
@@ -1232,7 +1236,10 @@ class CmdbClient:
 
         host_branch_map: dict[str, str] = {}
 
-        for rt in ref_types:
+        total_rt = len(ref_types)
+        for i, rt in enumerate(ref_types, 1):
+            if on_progress:
+                on_progress(i, total_rt)
             rt_uuid = rt.get("uuid")
             if not rt_uuid:
                 continue

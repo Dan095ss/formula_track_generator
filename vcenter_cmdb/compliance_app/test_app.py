@@ -302,3 +302,48 @@ def test_import_route(client, snap_dir):
     data = r.get_json()
     assert "id" in data
     assert data["summary"]["total"] == 1
+
+
+# ============================================================
+# CMDB client progress callbacks
+# ============================================================
+from cmdb_os_compliance import CmdbClient, Config
+
+
+class _FakeResp:
+    def __init__(self, payload, status=200):
+        self._payload, self.status_code, self.text = payload, status, ""
+    def json(self):
+        return self._payload
+
+
+class _FakeSession:
+    def __init__(self, pages):
+        self._pages = pages
+        self.headers = {}
+        self.verify = False
+    def get(self, url, params=None, timeout=None):
+        return _FakeResp(self._pages[params["page"] - 1])
+
+
+def _client():
+    c = CmdbClient(Config(cmdb_url="http://x", token="t"))
+    return c
+
+
+def test_iter_cis_invokes_on_page_each_page():
+    c = _client()
+    c._session = _FakeSession([
+        {"total_pages": 2, "total_items": 3, "page_data": [{"a": 1}]},
+        {"total_pages": 2, "total_items": 3, "page_data": [{"b": 2}]},
+    ])
+    seen = []
+    items = list(c.iter_cis("uuid", on_page=lambda p, t: seen.append((p, t))))
+    assert len(items) == 2
+    assert seen == [(1, 2), (2, 2)]
+
+
+def test_iter_cis_without_callback_still_works():
+    c = _client()
+    c._session = _FakeSession([{"total_pages": 1, "total_items": 1, "page_data": [{"a": 1}]}])
+    assert list(c.iter_cis("uuid")) == [{"a": 1}]
