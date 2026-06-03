@@ -67,6 +67,13 @@ def render_lines(roster: list[Analyst], schedule: MonthSchedule,
         lines.append(f"  [!] {v.message}")
     for v in soft:
         lines.append(f"  [~] {v.message}")
+
+    lines.append("")
+    lines.append("── Смены в месяце ──")
+    for a in roster:
+        count = schedule.shift_count(a.name)
+        flag = "" if 12 <= count <= 18 else "  <- вне диапазона"
+        lines.append(f"  {a.name[:26]:28} {count:2} смен{flag}")
     return lines
 
 

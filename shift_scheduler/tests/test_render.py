@@ -14,6 +14,7 @@ def test_render_lines_contains_header_and_glyphs():
     assert "Иванов Иван" in text
     assert "Запад" in text
     assert "Д" in text  # at least one day shift glyph
+    assert "Смены в месяце" in text or "смен" in text.lower()
 
 
 def test_render_lines_is_color_free_when_disabled():

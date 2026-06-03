@@ -32,6 +32,7 @@ def _opposite(region: Region) -> Region:
 
 def _assign_nights(roster: list[Analyst], grid: dict[str, list[ShiftType]],
                    n_days: int) -> None:
+    # WEST nights on cycle-pos 0, EAST on 1 — keeps regions in anti-phase so both dark windows are covered
     night_phase = {Region.WEST: 0, Region.EAST: 1}
     by_region: dict[Region, list[Analyst]] = {Region.WEST: [], Region.EAST: []}
     for a in roster:
