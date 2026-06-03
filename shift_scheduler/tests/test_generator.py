@@ -35,3 +35,27 @@ def test_request_on_off_day_is_noop():
     a = Analyst("A", Region.WEST, offset=0, day_off_requests={3})  # day 3 is OFF
     sch = generate([a], 2026, 6)
     assert sch.grid["A"][2] == O
+
+
+def test_night_only_for_night_permitted():
+    # Lone WEST analyst, no opposite-region coverage -> demand exists every day,
+    # but no allows_night => no NIGHT cells.
+    a = Analyst("A", Region.WEST, offset=0, allows_night=False)
+    sch = generate([a], 2026, 6)
+    assert N not in sch.grid["A"]
+
+
+def test_night_requires_preceding_off():
+    a = Analyst("A", Region.WEST, offset=0, allows_night=True)
+    sch = generate([a], 2026, 6)
+    for d, cell in enumerate(sch.grid["A"]):
+        if cell == N:
+            assert d > 0
+            assert sch.grid["A"][d - 1] in (O, V)
+
+
+def test_day_one_is_never_night():
+    # day index 0 has no preceding day -> cannot be NIGHT
+    a = Analyst("A", Region.WEST, offset=0, allows_night=True)
+    sch = generate([a], 2026, 6)
+    assert sch.grid["A"][0] != N

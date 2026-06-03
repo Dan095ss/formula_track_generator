@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import calendar
 
-from shift_scheduler.model import Analyst, MonthSchedule, ShiftType
+from shift_scheduler.model import Analyst, MonthSchedule, Region, ShiftType
 
 
 def _base_cell(offset: int, day_index: int) -> ShiftType:
@@ -22,4 +22,36 @@ def generate(roster: list[Analyst], year: int, month: int) -> MonthSchedule:
             if 1 <= day_num <= n_days:
                 row[day_num - 1] = ShiftType.OFF
         grid[a.name] = row
+    _assign_nights(roster, grid, n_days)
     return MonthSchedule(year=year, month=month, n_days=n_days, grid=grid)
+
+
+def _opposite(region: Region) -> Region:
+    return Region.EAST if region is Region.WEST else Region.WEST
+
+
+def _assign_nights(roster: list[Analyst], grid: dict[str, list[ShiftType]],
+                   n_days: int) -> None:
+    night_phase = {Region.WEST: 0, Region.EAST: 1}
+    by_region: dict[Region, list[Analyst]] = {Region.WEST: [], Region.EAST: []}
+    for a in roster:
+        by_region[a.region].append(a)
+
+    for d in range(n_days):
+        for region in (Region.WEST, Region.EAST):
+            opp = _opposite(region)
+            opp_day_cover = sum(
+                1 for a in by_region[opp] if grid[a.name][d] == ShiftType.DAY
+            )
+            if opp_day_cover > 0:
+                continue  # opposite region's daytime already covers this window
+            for a in by_region[region]:
+                if not a.allows_night:
+                    continue
+                if grid[a.name][d] != ShiftType.DAY:
+                    continue
+                if d == 0 or grid[a.name][d - 1] not in (ShiftType.OFF, ShiftType.VACATION):
+                    continue
+                if (a.offset + d) % 4 != night_phase[region]:
+                    continue
+                grid[a.name][d] = ShiftType.NIGHT
