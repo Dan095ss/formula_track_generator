@@ -62,3 +62,25 @@ def test_clean_schedule_has_no_hard_violations():
     a = Analyst("A", Region.WEST)
     sch = _sched({"A": [D, D, O, O, D, D, O, O]}, 8)
     assert _hard_msgs(validate(sch, [a])) == []
+
+
+def _soft_msgs(violations):
+    return [v.message for v in violations if v.severity == "soft"]
+
+
+def test_shift_count_out_of_range_flagged():
+    # 2 work days in a 30-day month -> well below 12.
+    a = Analyst("A", Region.WEST)
+    row = [D, D] + [O] * 28
+    sch = _sched({"A": row}, 30)
+    v = validate(sch, [a])
+    assert any("смен" in m for m in _soft_msgs(v))
+
+
+def test_average_far_from_15_flagged():
+    a = Analyst("A", Region.WEST)
+    b = Analyst("B", Region.WEST)
+    row = [D, D] + [O] * 28
+    sch = _sched({"A": row, "B": row}, 30)
+    v = validate(sch, [a, b])
+    assert any("среднее" in m.lower() for m in _soft_msgs(v))

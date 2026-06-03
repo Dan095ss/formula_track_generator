@@ -61,4 +61,15 @@ def validate(schedule: MonthSchedule, roster: list[Analyst]) -> list[Violation]:
                     out.append(Violation("hard", f"день {d+1}",
                                          f"{region.label}: покрытие < 2 чел (день {d+1})"))
 
+    counts = [schedule.shift_count(a.name) for a in roster]
+    for a, c in zip(roster, counts):
+        if not (12 <= c <= 18):
+            out.append(Violation("soft", a.name,
+                                 f"{a.name}: {c} смен (желательно 12..18)"))
+    if counts:
+        avg = sum(counts) / len(counts)
+        if abs(avg - 15) > 2:
+            out.append(Violation("soft", "команда",
+                                 f"среднее по команде {avg:.1f} (цель ~15)"))
+
     return out
