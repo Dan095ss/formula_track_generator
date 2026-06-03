@@ -18,7 +18,7 @@ export function getMonthDays(year: number, month: number): Date[] {
  * Used for matching server-stored shift starts_at values to calendar cells —
  * avoids timezone drift where 20:00 UTC becomes the next calendar day in UTC+4+.
  */
-function toUTCDateKey(date: Date): string {
+export function toUTCDateKey(date: Date): string {
   const y = date.getUTCFullYear();
   const m = String(date.getUTCMonth() + 1).padStart(2, "0");
   const d = String(date.getUTCDate()).padStart(2, "0");
