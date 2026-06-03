@@ -59,3 +59,16 @@ def test_day_one_is_never_night():
     a = Analyst("A", Region.WEST, offset=0, allows_night=True)
     sch = generate([a], 2026, 6)
     assert sch.grid["A"][0] != N
+
+
+from shift_scheduler.roster import demo_roster
+
+
+def test_demo_roster_is_even_and_has_both_regions():
+    r = demo_roster()
+    assert len(r) % 2 == 0 and len(r) > 2
+    regions = {a.region for a in r}
+    assert Region.WEST in regions and Region.EAST in regions
+    assert any(a.allows_night for a in r)
+    assert any(a.vacation for a in r)
+    assert any(a.day_off_requests for a in r)
