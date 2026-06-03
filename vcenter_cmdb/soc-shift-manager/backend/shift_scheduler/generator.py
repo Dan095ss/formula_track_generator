@@ -30,6 +30,18 @@ def _opposite(region: Region) -> Region:
     return Region.EAST if region is Region.WEST else Region.WEST
 
 
+def _would_exceed_consecutive(grid: dict[str, list[ShiftType]], name: str,
+                               d: int, n_days: int) -> bool:
+    """Return True if placing a NIGHT on day d would create >2 consecutive work days."""
+    run_after = 0
+    for dd in range(d + 1, min(d + 3, n_days)):
+        if grid[name][dd].is_working:
+            run_after += 1
+        else:
+            break
+    return 1 + run_after > 2
+
+
 def _assign_nights(roster: list[Analyst], grid: dict[str, list[ShiftType]],
                    n_days: int) -> None:
     # WEST nights on cycle-pos 0, EAST on 1 — keeps regions in anti-phase so both dark windows are covered
@@ -60,9 +72,9 @@ def _assign_nights(roster: list[Analyst], grid: dict[str, list[ShiftType]],
                 grid[a.name][d] = ShiftType.NIGHT
                 break  # one night per day per region is enough
 
-            # Pass 2: if still no coverage, promote an OFF day to NIGHT.
-            # Only for analysts with allows_night=True whose OFF is from the natural cycle
-            # (not a hard vacation or explicit day-off request), and preceding day is off.
+            # Pass 2: if still no coverage, promote a natural OFF day to NIGHT.
+            # Only when the OFF is from the 2/2 cycle (not vacation or explicit Вх),
+            # preceding day is non-working, and assigning won't create >2 consecutive.
             opp_day_cover_after = sum(
                 1 for a in by_region[opp] if grid[a.name][d] == ShiftType.DAY
             )
@@ -77,12 +89,15 @@ def _assign_nights(roster: list[Analyst], grid: dict[str, list[ShiftType]],
                     continue
                 if grid[a.name][d] != ShiftType.OFF:
                     continue
-                # Hard constraints: vacation or explicit day-off request block this day
+                # Hard constraints block the day
                 day_num = d + 1
                 if day_num in a.vacation or day_num in a.day_off_requests:
                     continue
                 # Preceding day must be non-working (rest before night)
                 if d == 0 or grid[a.name][d - 1] not in (ShiftType.OFF, ShiftType.VACATION):
+                    continue
+                # Safety: don't create >2 consecutive work days
+                if _would_exceed_consecutive(grid, a.name, d, n_days):
                     continue
                 grid[a.name][d] = ShiftType.NIGHT
                 break
