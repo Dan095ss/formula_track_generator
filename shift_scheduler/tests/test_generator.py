@@ -1,5 +1,6 @@
 from shift_scheduler.model import Analyst, Region, ShiftType
 from shift_scheduler.generator import generate
+from shift_scheduler.roster import demo_roster
 
 D, O, N, V = ShiftType.DAY, ShiftType.OFF, ShiftType.NIGHT, ShiftType.VACATION
 
@@ -61,10 +62,8 @@ def test_day_one_is_never_night():
     assert sch.grid["A"][0] != N
 
 
-from shift_scheduler.roster import demo_roster
 
-
-def test_demo_roster_is_even_and_has_both_regions():
+def test_demo_roster_has_both_regions_and_night_capable():
     r = demo_roster()
     assert len(r) >= 2
     regions = {a.region for a in r}
@@ -72,3 +71,9 @@ def test_demo_roster_is_even_and_has_both_regions():
     assert any(a.allows_night for a in r)
     assert any(a.vacation for a in r)
     assert any(a.day_off_requests for a in r)
+
+
+def test_vacation_wins_over_day_off_request_on_same_day():
+    a = Analyst("A", Region.WEST, offset=0, vacation={1}, day_off_requests={1})
+    sch = generate([a], 2026, 6)
+    assert sch.grid["A"][0] == V  # VACATION must win, not OFF

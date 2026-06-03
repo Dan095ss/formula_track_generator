@@ -23,7 +23,6 @@ def _max_consecutive_work(row: list[ShiftType]) -> int:
 
 def validate(schedule: MonthSchedule, roster: list[Analyst]) -> list[Violation]:
     out: list[Violation] = []
-    by_name = {a.name: a for a in roster}
     even_team = len(roster) > 2 and len(roster) % 2 == 0
 
     for a in roster:

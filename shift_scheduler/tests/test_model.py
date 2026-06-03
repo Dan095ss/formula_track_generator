@@ -1,4 +1,4 @@
-from shift_scheduler.model import Region, ShiftType
+from shift_scheduler.model import Analyst, MonthSchedule, Region, ShiftType
 
 
 def test_region_has_two_members_with_labels():
@@ -19,8 +19,6 @@ def test_shifttype_is_working():
     assert not ShiftType.OFF.is_working
     assert not ShiftType.VACATION.is_working
 
-
-from shift_scheduler.model import Analyst, MonthSchedule
 
 
 def _analyst(name="A", region=Region.WEST, **kw):

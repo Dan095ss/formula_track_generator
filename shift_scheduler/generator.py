@@ -19,7 +19,7 @@ def generate(roster: list[Analyst], year: int, month: int) -> MonthSchedule:
             if 1 <= day_num <= n_days:
                 row[day_num - 1] = ShiftType.VACATION
         for day_num in a.day_off_requests:
-            if 1 <= day_num <= n_days:
+            if 1 <= day_num <= n_days and row[day_num - 1] != ShiftType.VACATION:
                 row[day_num - 1] = ShiftType.OFF
         grid[a.name] = row
     _assign_nights(roster, grid, n_days)

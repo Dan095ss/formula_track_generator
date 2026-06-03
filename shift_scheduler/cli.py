@@ -20,8 +20,10 @@ def main(argv: list[str] | None = None) -> int:
     today = date.today()
     p = argparse.ArgumentParser(description="Генератор графика смен 2/2 (демо).")
     p.add_argument("--year", type=int, default=today.year)
-    p.add_argument("--month", type=int, default=today.month)
+    p.add_argument("--month", type=int, default=today.month,
+                   choices=range(1, 13), metavar="1-12")
     p.add_argument("--months", type=int, default=1,
+                   choices=range(1, 25), metavar="1-24",
                    help="сколько месяцев показать подряд (демонстрация наследования)")
     p.add_argument("--no-color", action="store_true")
     args = p.parse_args(argv)

@@ -1,7 +1,6 @@
 """Terminal rendering: calendar table + validator report. Pure line builder."""
 from __future__ import annotations
 
-import calendar
 from datetime import date
 
 from shift_scheduler.model import Analyst, MonthSchedule, Region, ShiftType
