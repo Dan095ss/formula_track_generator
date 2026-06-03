@@ -55,7 +55,7 @@ def test_even_team_coverage_below_two_flagged():
     }
     sch = _sched(grid, 2)
     v = validate(sch, roster)
-    assert any("покрыт" in m.lower() for m in _hard_msgs(v))
+    assert any("покрыт" in m.lower() for m in _soft_msgs(v))
 
 
 def test_clean_schedule_has_no_hard_violations():

@@ -57,9 +57,18 @@ def validate(schedule: MonthSchedule, roster: list[Analyst]) -> list[Violation]:
             if len(members) < 2:
                 continue
             for d in range(schedule.n_days):
-                if schedule.region_working(d, region, roster) < 2:
-                    out.append(Violation("hard", f"день {d+1}",
-                                         f"{region.label}: покрытие < 2 чел (день {d+1})"))
+                if schedule.region_working(d, region, roster) >= 2:
+                    continue
+                day_num = d + 1
+                approved_absence = any(
+                    day_num in a.vacation or day_num in a.day_off_requests
+                    for a in members
+                    if not schedule.grid[a.name][d].is_working
+                )
+                if approved_absence:
+                    continue
+                out.append(Violation("soft", f"день {day_num}",
+                                     f"{region.label}: покрытие < 2 чел (день {day_num})"))
 
     counts = [schedule.shift_count(a.name) for a in roster]
     for a, c in zip(roster, counts):
