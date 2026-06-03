@@ -46,6 +46,8 @@ def _assign_nights(roster: list[Analyst], grid: dict[str, list[ShiftType]],
             )
             if opp_day_cover > 0:
                 continue  # opposite region's daytime already covers this window
+
+            # Pass 1: convert an existing DAY shift to NIGHT (preferred — no extra work day)
             for a in by_region[region]:
                 if not a.allows_night:
                     continue
@@ -56,6 +58,34 @@ def _assign_nights(roster: list[Analyst], grid: dict[str, list[ShiftType]],
                 if (a.offset + d) % 4 != night_phase[region]:
                     continue
                 grid[a.name][d] = ShiftType.NIGHT
+                break  # one night per day per region is enough
+
+            # Pass 2: if still no coverage, promote an OFF day to NIGHT.
+            # Only for analysts with allows_night=True whose OFF is from the natural cycle
+            # (not a hard vacation or explicit day-off request), and preceding day is off.
+            opp_day_cover_after = sum(
+                1 for a in by_region[opp] if grid[a.name][d] == ShiftType.DAY
+            )
+            region_night_cover = sum(
+                1 for a in by_region[region] if grid[a.name][d] == ShiftType.NIGHT
+            )
+            if opp_day_cover_after > 0 or region_night_cover > 0:
+                continue
+
+            for a in by_region[region]:
+                if not a.allows_night:
+                    continue
+                if grid[a.name][d] != ShiftType.OFF:
+                    continue
+                # Hard constraints: vacation or explicit day-off request block this day
+                day_num = d + 1
+                if day_num in a.vacation or day_num in a.day_off_requests:
+                    continue
+                # Preceding day must be non-working (rest before night)
+                if d == 0 or grid[a.name][d - 1] not in (ShiftType.OFF, ShiftType.VACATION):
+                    continue
+                grid[a.name][d] = ShiftType.NIGHT
+                break
 
 
 def inherit_offsets(roster: list[Analyst], year: int, month: int) -> None:
