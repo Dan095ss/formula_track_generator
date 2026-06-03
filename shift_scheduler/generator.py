@@ -55,3 +55,12 @@ def _assign_nights(roster: list[Analyst], grid: dict[str, list[ShiftType]],
                 if (a.offset + d) % 4 != night_phase[region]:
                     continue
                 grid[a.name][d] = ShiftType.NIGHT
+
+
+def inherit_offsets(roster: list[Analyst], year: int, month: int) -> None:
+    """Shift each analyst's phase into the next month and clear one-off overrides."""
+    n_days = calendar.monthrange(year, month)[1]
+    for a in roster:
+        a.offset = (a.offset + n_days) % 4
+        a.vacation = set()
+        a.day_off_requests = set()
